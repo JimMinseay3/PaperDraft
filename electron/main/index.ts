@@ -31,7 +31,7 @@ const indexHtml = join(process.env.DIST, 'index.html')
 async function createWindow() {
   win = new BrowserWindow({
     title: 'PaperDraft',
-    icon: join(process.env.PUBLIC, 'favicon.ico'),
+    icon: join(process.env.PUBLIC || '', 'favicon.ico'),
     width: 1200,
     height: 800,
     frame: false, // Custom window bar
@@ -45,7 +45,7 @@ async function createWindow() {
   })
 
   if (process.env.VITE_DEV_SERVER_URL) { // electron-vite-vue#298
-    win.loadURL(url)
+    win.loadURL(url as string)
     // Open devTool if the app is not packaged
     win.webContents.openDevTools()
   } else {

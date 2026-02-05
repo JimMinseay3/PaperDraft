@@ -17,6 +17,7 @@ export interface Block {
     level?: number;      // heading level
     src?: string;        // image source
     caption?: string;    // image caption
+    fileName?: string;   // image filename (for assets)
     refId?: string;      // citation reference
     checked?: boolean;   // task list item checked state
     language?: string;   // code block language

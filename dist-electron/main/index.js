@@ -2742,7 +2742,7 @@ const indexHtml = path.join(process.env.DIST, "index.html");
 async function createWindow() {
   win = new electron.BrowserWindow({
     title: "PaperDraft",
-    icon: path.join(process.env.PUBLIC, "favicon.ico"),
+    icon: path.join(process.env.PUBLIC || "", "favicon.ico"),
     width: 1200,
     height: 800,
     frame: false,

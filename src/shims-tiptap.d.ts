@@ -20,6 +20,7 @@ declare module '@tiptap/vue-3/menus' {
   
   export const BubbleMenu: DefineComponent<any, {}, any>
   export const FloatingMenu: DefineComponent<any, {}, any>
+  export function useEditor(options: any): Ref<any>
 }
 
 declare module '@tiptap/starter-kit' {
@@ -62,4 +63,14 @@ declare module '@tiptap/extension-bubble-menu' {
   const BubbleMenuExtension: any
   export const BubbleMenu: DefineComponent<any, {}, any>
   export default BubbleMenuExtension
+}
+
+import '@tiptap/core'
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    imageUpload: {
+      triggerImageUpload: () => ReturnType
+    }
+  }
 }

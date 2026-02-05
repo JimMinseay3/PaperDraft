@@ -3,13 +3,13 @@ import { useEditor, EditorContent } from '@tiptap/vue-3'
 import { BubbleMenu } from '@tiptap/vue-3/menus'
 import { Extension } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
-import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu'
 import SlashCommand from './SlashCommandExtension'
+import ImageExtension from './ImageExtension'
 import { watch, onBeforeUnmount, ref } from 'vue'
 import { 
   Plus, 
@@ -39,7 +39,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Block[]): void
   (e: 'change'): void
+  (e: 'add-asset', filename: string, base64: string): void
 }>()
+
+const fileInput = ref<HTMLInputElement | null>(null)
 
 // Helper to map TipTap JSON to our Block structure
 const mapTipTapToBlocks = (json: any): Block[] => {
@@ -58,14 +61,23 @@ const mapTipTapToBlocks = (json: any): Block[] => {
     else if (node.type === 'taskList') { type = 'list'; attrs.listType = 'task' }
     else if (node.type === 'codeBlock') type = 'code'
 
-    // ... handle assets
-    if (type === 'image' && attrs.src && props.assets) {
-       for (const [filename, base64] of Object.entries(props.assets)) {
-         if (attrs.src === base64) {
-           attrs.src = `assets/${filename}`
-           break
+    // Handle Image Assets
+    if (type === 'image') {
+      // 1. Try to use fileName directly if available (Most reliable)
+      if (attrs.fileName) {
+        attrs.src = `assets/${attrs.fileName}`
+      } 
+      // 2. Fallback: Try to match Base64 in assets (Slow, but necessary for backward compatibility)
+      else if (attrs.src && attrs.src.startsWith('data:') && props.assets) {
+         for (const [filename, base64] of Object.entries(props.assets)) {
+           if (attrs.src === base64) {
+             attrs.src = `assets/${filename}`
+             // Backfill fileName for future
+             attrs.fileName = filename
+             break
+           }
          }
-       }
+      }
     }
 
     return {
@@ -112,9 +124,10 @@ const mapBlocksToTipTap = (blocks: Block[]) => {
               const filename = src.split('/')[1]
               if (props.assets[filename]) {
                   src = props.assets[filename]
+                  node.attrs.fileName = filename
               }
           }
-          node.attrs = { src: src, caption: block.attrs?.caption }
+          node.attrs.src = src
           delete node.content
       }
       
@@ -176,7 +189,7 @@ const editor = useEditor({
       },
     }),
     GlobalId,
-    Image.configure({
+    ImageExtension.configure({
         allowBase64: true,
     }),
     TaskList,
@@ -194,6 +207,17 @@ const editor = useEditor({
     Highlight,
     SlashCommand,
     BubbleMenuExtension,
+    Extension.create({
+      name: 'imageUpload',
+      addCommands() {
+        return {
+          triggerImageUpload: () => () => {
+            fileInput.value?.click()
+            return true
+          }
+        }
+      }
+    })
   ],
   onUpdate: ({ editor }) => {
     // 1. Enforce unique IDs directly in the editor state
@@ -244,6 +268,34 @@ watch(() => props.modelValue, (newValue) => {
 onBeforeUnmount(() => {
   editor.value?.destroy()
 })
+
+// Handle image upload
+const handleImageUpload = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files[0]) {
+    const file = input.files[0]
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string
+      if (base64) {
+        // Generate a unique ID for the asset
+        const ext = file.name.split('.').pop() || 'png'
+        const filename = `img_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${ext}`
+        
+        // Emit to parent to store the asset
+        emit('add-asset', filename, base64)
+        
+        // Insert into editor
+        // We assume parent updates props.assets quickly enough or we rely on the base64 for now
+        editor.value?.chain().focus().setImage({ src: base64 }).run()
+        
+        // Reset input
+        input.value = ''
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+}
 
 const scrollToBlock = (blockId: string) => {
   console.log('[Editor] scrollToBlock called with ID:', blockId)
@@ -383,6 +435,15 @@ defineExpose({
       </bubble-menu>
 
       <editor-content :editor="editor" class="prose prose-slate max-w-none outline-none" />
+
+      <!-- Hidden file input for image upload -->
+      <input 
+        type="file" 
+        ref="fileInput" 
+        class="hidden" 
+        accept="image/*" 
+        @change="handleImageUpload"
+      />
     </div>
   </div>
 </template>

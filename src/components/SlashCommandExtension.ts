@@ -12,7 +12,8 @@ import {
   List, 
   ListOrdered, 
   CheckSquare, 
-  Code 
+  Code,
+  Image
 } from 'lucide-vue-next'
 import { markRaw } from 'vue'
 
@@ -94,6 +95,17 @@ export default Extension.create({
           icon: markRaw(Code),
           command: ({ editor, range }: any) => {
             editor.chain().focus().deleteRange(range).toggleCodeBlock().run()
+          },
+        },
+        {
+          title: 'Image',
+          icon: markRaw(Image),
+          command: ({ editor, range }: any) => {
+            editor.chain().focus().deleteRange(range).run()
+            // Call the custom command registered in Editor.vue
+            if (editor.commands.triggerImageUpload) {
+              editor.commands.triggerImageUpload()
+            }
           },
         },
       ],

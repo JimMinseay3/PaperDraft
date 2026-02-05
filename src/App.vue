@@ -103,6 +103,11 @@ const scrollToBlock = (blockId: string) => {
   }
 }
 
+const addAsset = (filename: string, base64: string) => {
+  assets.value[filename] = base64
+  console.log('[App] Asset added:', filename)
+}
+
 // Initial render
 onMounted(() => {
   renderPDF()
@@ -140,6 +145,7 @@ onMounted(() => {
           v-model="paperData.body" 
           :assets="assets"
           @change="triggerRender" 
+          @add-asset="addAsset"
         />
       </div>
 
