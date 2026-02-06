@@ -31,6 +31,13 @@ const handleMouseMove = (event: MouseEvent) => {
   const $pos = view.state.doc.resolve(pos)
   
   let depth = $pos.depth
+  
+  // Safety check: Cannot interact with root node (depth 0) or if depth is invalid
+  if (depth === 0) {
+      visible.value = false
+      return
+  }
+
   let nodePos = $pos.before(depth)
   let node = $pos.node(depth)
 

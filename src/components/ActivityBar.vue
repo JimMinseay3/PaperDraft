@@ -53,11 +53,5 @@ const isActive = (id: string) => {
     >
       <component :is="item.icon" :size="18" class="w-[18px] h-[18px]" stroke-width="2" />
     </div>
-
-    <!-- Settings (Bottom) -->
-    <div class="flex-1"></div>
-    <div class="w-7 h-7 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 cursor-pointer transition-colors flex items-center justify-center" title="Settings">
-      <Settings :size="18" class="w-[18px] h-[18px]" stroke-width="2" />
-    </div>
   </div>
 </template>

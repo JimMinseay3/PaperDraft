@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ipcRenderer } from 'electron'
+import { PanelLeft, Settings, User } from 'lucide-vue-next'
 
 const isMaximized = ref(false)
 const activeMenu = ref<string | null>(null)
@@ -8,6 +9,7 @@ const activeMenu = ref<string | null>(null)
 const emit = defineEmits<{
   (e: 'open'): void
   (e: 'save'): void
+  (e: 'toggle-assistant'): void
 }>()
 
 const minimize = () => {
@@ -134,8 +136,27 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Right: Window Controls -->
-    <div class="flex h-full no-drag-region min-w-[120px] justify-end">
+    <!-- Right: Trae-like Controls & Window Controls -->
+    <div class="flex h-full no-drag-region items-center">
+      <!-- Trae Controls (Sidebar, Settings, User) -->
+      <div class="flex items-center space-x-1 mr-2 border-r border-gray-700 pr-2 h-4/5">
+        <button 
+          @click="emit('toggle-assistant')"
+          class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" 
+          title="Toggle Assistant"
+        >
+          <PanelLeft class="w-3.5 h-3.5" stroke-width="2" />
+        </button>
+        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" title="Settings">
+          <Settings class="w-3.5 h-3.5" stroke-width="2" />
+        </button>
+        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" title="User">
+          <User class="w-3.5 h-3.5" stroke-width="2" />
+        </button>
+      </div>
+
+      <!-- Window Controls -->
+      <div class="flex h-full min-w-[120px] justify-end">
       <!-- Minimize -->
       <button @click="minimize" class="w-10 h-full flex items-center justify-center hover:bg-gray-700 transition-colors focus:outline-none" title="Minimize">
         <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
@@ -163,6 +184,7 @@ onUnmounted(() => {
       </button>
     </div>
   </div>
+</div>
 </template>
 
 <style scoped>

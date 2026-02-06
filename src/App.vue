@@ -27,6 +27,7 @@ const pdfUrl = ref<string | null>(null)
 const isRendering = ref(false)
 const editorRef = ref<any>(null)
 const activeView = ref('file')
+const showAssistant = ref(true)
 
 // Actions
 const openPreviewWindow = async () => {
@@ -119,6 +120,7 @@ onMounted(() => {
     <TitleBar 
       @open="loadProject"
       @save="saveProject"
+      @toggle-assistant="showAssistant = !showAssistant"
     />
     
     <!-- Main Content (4-Column Layout) -->
@@ -159,7 +161,7 @@ onMounted(() => {
       </div>
 
       <!-- 4. Auxiliary/Copilot (Flex 1) -->
-      <div class="flex-1 min-w-0 bg-gray-50 flex flex-col">
+      <div v-show="showAssistant" class="flex-1 min-w-0 bg-gray-50 flex flex-col transition-all duration-300">
         <div class="h-8 bg-gray-100 border-b border-gray-300 flex items-center px-2 text-xs font-bold text-gray-600">
           Assistant
         </div>
