@@ -2827,34 +2827,34 @@ const isRegExp$1 = tagTester("RegExp");
 const isError = tagTester("Error");
 const isSymbol = tagTester("Symbol");
 const isArrayBuffer = tagTester("ArrayBuffer");
-var isFunction$1 = tagTester("Function");
+var isFunction = tagTester("Function");
 var nodelist = root.document && root.document.childNodes;
 if (typeof /./ != "function" && typeof Int8Array != "object" && typeof nodelist != "function") {
-  isFunction$1 = function(obj) {
+  isFunction = function(obj) {
     return typeof obj == "function" || false;
   };
 }
-const isFunction = isFunction$1;
+const isFunction$1 = isFunction;
 const hasObjectTag = tagTester("Object");
 var hasDataViewBug = supportsDataView && (!/\[native code\]/.test(String(DataView)) || hasObjectTag(new DataView(new ArrayBuffer(8)))), isIE11 = typeof Map !== "undefined" && hasObjectTag(/* @__PURE__ */ new Map());
-var isDataView$1 = tagTester("DataView");
+var isDataView = tagTester("DataView");
 function alternateIsDataView(obj) {
-  return obj != null && isFunction(obj.getInt8) && isArrayBuffer(obj.buffer);
+  return obj != null && isFunction$1(obj.getInt8) && isArrayBuffer(obj.buffer);
 }
-const isDataView = hasDataViewBug ? alternateIsDataView : isDataView$1;
+const isDataView$1 = hasDataViewBug ? alternateIsDataView : isDataView;
 const isArray = nativeIsArray || tagTester("Array");
 function has$1(obj, key) {
   return obj != null && hasOwnProperty.call(obj, key);
 }
-var isArguments$1 = tagTester("Arguments");
+var isArguments = tagTester("Arguments");
 (function() {
-  if (!isArguments$1(arguments)) {
-    isArguments$1 = function(obj) {
+  if (!isArguments(arguments)) {
+    isArguments = function(obj) {
       return has$1(obj, "callee");
     };
   }
 })();
-const isArguments = isArguments$1;
+const isArguments$1 = isArguments;
 function isFinite$1(obj) {
   return !isSymbol(obj) && _isFinite(obj) && !isNaN(parseFloat(obj));
 }
@@ -2880,10 +2880,10 @@ function shallowProperty(key) {
 const getByteLength = shallowProperty("byteLength");
 const isBufferLike = createSizePropertyCheck(getByteLength);
 var typedArrayPattern = /\[object ((I|Ui)nt(8|16|32)|Float(32|64)|Uint8Clamped|Big(I|Ui)nt64)Array\]/;
-function isTypedArray$1(obj) {
-  return nativeIsView ? nativeIsView(obj) && !isDataView(obj) : isBufferLike(obj) && typedArrayPattern.test(toString$2.call(obj));
+function isTypedArray(obj) {
+  return nativeIsView ? nativeIsView(obj) && !isDataView$1(obj) : isBufferLike(obj) && typedArrayPattern.test(toString$2.call(obj));
 }
-const isTypedArray = supportsArrayBuffer ? isTypedArray$1 : constant(false);
+const isTypedArray$1 = supportsArrayBuffer ? isTypedArray : constant(false);
 const getLength = shallowProperty("length");
 function emulatedSet(keys2) {
   var hash = {};
@@ -2902,7 +2902,7 @@ function collectNonEnumProps(obj, keys2) {
   keys2 = emulatedSet(keys2);
   var nonEnumIdx = nonEnumerableProps.length;
   var constructor = obj.constructor;
-  var proto = isFunction(constructor) && constructor.prototype || ObjProto;
+  var proto = isFunction$1(constructor) && constructor.prototype || ObjProto;
   var prop = "constructor";
   if (has$1(obj, prop) && !keys2.contains(prop)) keys2.push(prop);
   while (nonEnumIdx--) {
@@ -2923,7 +2923,7 @@ function keys(obj) {
 function isEmpty(obj) {
   if (obj == null) return true;
   var length = getLength(obj);
-  if (typeof length == "number" && (isArray(obj) || isString(obj) || isArguments(obj))) return length === 0;
+  if (typeof length == "number" && (isArray(obj) || isString(obj) || isArguments$1(obj))) return length === 0;
   return getLength(keys(obj)) === 0;
 }
 function isMatch(object2, attrs) {
@@ -2970,8 +2970,8 @@ function deepEq(a, b, aStack, bStack) {
   if (b instanceof _$i) b = b._wrapped;
   var className = toString$2.call(a);
   if (className !== toString$2.call(b)) return false;
-  if (hasDataViewBug && className == "[object Object]" && isDataView(a)) {
-    if (!isDataView(b)) return false;
+  if (hasDataViewBug && className == "[object Object]" && isDataView$1(a)) {
+    if (!isDataView$1(b)) return false;
     className = tagDataView;
   }
   switch (className) {
@@ -2991,7 +2991,7 @@ function deepEq(a, b, aStack, bStack) {
       return deepEq(toBufferView(a), toBufferView(b), aStack, bStack);
   }
   var areArrays = className === "[object Array]";
-  if (!areArrays && isTypedArray(a)) {
+  if (!areArrays && isTypedArray$1(a)) {
     var byteLength2 = getByteLength(a);
     if (byteLength2 !== getByteLength(b)) return false;
     if (a.buffer === b.buffer && a.byteOffset === b.byteOffset) return true;
@@ -3000,7 +3000,7 @@ function deepEq(a, b, aStack, bStack) {
   if (!areArrays) {
     if (typeof a != "object" || typeof b != "object") return false;
     var aCtor = a.constructor, bCtor = b.constructor;
-    if (aCtor !== bCtor && !(isFunction(aCtor) && aCtor instanceof aCtor && isFunction(bCtor) && bCtor instanceof bCtor) && ("constructor" in a && "constructor" in b)) {
+    if (aCtor !== bCtor && !(isFunction$1(aCtor) && aCtor instanceof aCtor && isFunction$1(bCtor) && bCtor instanceof bCtor) && ("constructor" in a && "constructor" in b)) {
       return false;
     }
   }
@@ -3048,9 +3048,9 @@ function ie11fingerprint(methods2) {
     var keys2 = allKeys(obj);
     if (getLength(keys2)) return false;
     for (var i = 0; i < length; i++) {
-      if (!isFunction(obj[methods2[i]])) return false;
+      if (!isFunction$1(obj[methods2[i]])) return false;
     }
-    return methods2 !== weakMapMethods || !isFunction(obj[forEachName]);
+    return methods2 !== weakMapMethods || !isFunction$1(obj[forEachName]);
   };
 }
 var forEachName = "forEach", hasName = "has", commonInit = ["clear", "delete"], mapTail = ["get", hasName, "set"];
@@ -3088,7 +3088,7 @@ function invert(obj) {
 function functions(obj) {
   var names = [];
   for (var key in obj) {
-    if (isFunction(obj[key])) names.push(key);
+    if (isFunction$1(obj[key])) names.push(key);
   }
   return names.sort();
 }
@@ -3202,7 +3202,7 @@ function optimizeCb(func, context2, argCount) {
 }
 function baseIteratee(value, context2, argCount) {
   if (value == null) return identity$2;
-  if (isFunction(value)) return optimizeCb(value, context2, argCount);
+  if (isFunction$1(value)) return optimizeCb(value, context2, argCount);
   if (isObject(value) && !isArray(value)) return matcher(value);
   return property(value);
 }
@@ -3339,7 +3339,7 @@ function result(obj, path2, fallback) {
   path2 = toPath(path2);
   var length = path2.length;
   if (!length) {
-    return isFunction(fallback) ? fallback.call(obj) : fallback;
+    return isFunction$1(fallback) ? fallback.call(obj) : fallback;
   }
   for (var i = 0; i < length; i++) {
     var prop = obj == null ? void 0 : obj[path2[i]];
@@ -3347,7 +3347,7 @@ function result(obj, path2, fallback) {
       prop = fallback;
       i = length;
     }
-    obj = isFunction(prop) ? prop.call(obj) : prop;
+    obj = isFunction$1(prop) ? prop.call(obj) : prop;
   }
   return obj;
 }
@@ -3383,7 +3383,7 @@ var partial = restArguments(function(func, boundArgs) {
 });
 partial.placeholder = _$i;
 const bind$1 = restArguments(function(func, context2, args) {
-  if (!isFunction(func)) throw new TypeError("Bind must be called on a function");
+  if (!isFunction$1(func)) throw new TypeError("Bind must be called on a function");
   var bound = restArguments(function(callArgs) {
     return executeBound(func, bound, context2, this, args.concat(callArgs));
   });
@@ -3400,7 +3400,7 @@ function flatten$1(input, depth, strict, output) {
   var idx = output.length;
   for (var i = 0, length = getLength(input); i < length; i++) {
     var value = input[i];
-    if (isArrayLike(value) && (isArray(value) || isArguments(value))) {
+    if (isArrayLike(value) && (isArray(value) || isArguments$1(value))) {
       if (depth > 1) {
         flatten$1(value, depth - 1, strict, output);
         idx = output.length;
@@ -3685,7 +3685,7 @@ function contains(obj, item, fromIndex, guard) {
 }
 const invoke = restArguments(function(obj, path2, args) {
   var contextPath, func;
-  if (isFunction(path2)) {
+  if (isFunction$1(path2)) {
     func = path2;
   } else {
     path2 = toPath(path2);
@@ -3838,7 +3838,7 @@ function keyInObj(value, key, obj) {
 const pick = restArguments(function(obj, keys2) {
   var result2 = {}, iteratee2 = keys2[0];
   if (obj == null) return result2;
-  if (isFunction(iteratee2)) {
+  if (isFunction$1(iteratee2)) {
     if (keys2.length > 1) iteratee2 = optimizeCb(iteratee2, keys2[1]);
     keys2 = allKeys(obj);
   } else {
@@ -3855,7 +3855,7 @@ const pick = restArguments(function(obj, keys2) {
 });
 const omit = restArguments(function(obj, keys2) {
   var iteratee2 = keys2[0], context2;
-  if (isFunction(iteratee2)) {
+  if (isFunction$1(iteratee2)) {
     iteratee2 = negate(iteratee2);
     if (keys2.length > 1) context2 = keys2[1];
   } else {
@@ -4078,18 +4078,18 @@ const allExports = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   intersection,
   invert,
   invoke,
-  isArguments,
+  isArguments: isArguments$1,
   isArray,
   isArrayBuffer,
   isBoolean,
-  isDataView,
+  isDataView: isDataView$1,
   isDate,
   isElement,
   isEmpty,
   isEqual,
   isError,
   isFinite: isFinite$1,
-  isFunction,
+  isFunction: isFunction$1,
   isMap,
   isMatch,
   isNaN: isNaN$1,
@@ -4100,7 +4100,7 @@ const allExports = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   isSet,
   isString,
   isSymbol,
-  isTypedArray,
+  isTypedArray: isTypedArray$1,
   isUndefined,
   isWeakMap,
   isWeakSet,
@@ -4229,18 +4229,18 @@ const indexAll = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
   intersection,
   invert,
   invoke,
-  isArguments,
+  isArguments: isArguments$1,
   isArray,
   isArrayBuffer,
   isBoolean,
-  isDataView,
+  isDataView: isDataView$1,
   isDate,
   isElement,
   isEmpty,
   isEqual,
   isError,
   isFinite: isFinite$1,
-  isFunction,
+  isFunction: isFunction$1,
   isMap,
   isMatch,
   isNaN: isNaN$1,
@@ -4251,7 +4251,7 @@ const indexAll = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
   isSet,
   isString,
   isSymbol,
-  isTypedArray,
+  isTypedArray: isTypedArray$1,
   isUndefined,
   isWeakMap,
   isWeakSet,
