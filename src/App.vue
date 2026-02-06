@@ -4,8 +4,10 @@ import { ipcRenderer } from 'electron'
 import TitleBar from './components/TitleBar.vue'
 import ActivityBar from './components/ActivityBar.vue'
 import Sidebar from './components/Sidebar.vue'
+import SearchSidebar from './components/SearchSidebar.vue'
+import VersionSidebar from './components/VersionSidebar.vue'
+import ResourceSidebar from './components/ResourceSidebar.vue'
 import Editor from './components/Editor.vue'
-import Preview from './components/Preview.vue'
 import type { PaperData } from './types/paper'
 
 // Initial State
@@ -24,11 +26,31 @@ const currentFilePath = ref<string>('')
 const pdfUrl = ref<string | null>(null)
 const isRendering = ref(false)
 const editorRef = ref<any>(null)
-const showPreview = ref(true)
+const activeView = ref('file')
 
 // Actions
-const togglePreview = () => {
-  showPreview.value = !showPreview.value
+const openPreviewWindow = async () => {
+  if (isRendering.value) return
+  isRendering.value = true
+  
+  try {
+    const dataClone = JSON.parse(JSON.stringify(paperData.value))
+    const assetsClone = JSON.parse(JSON.stringify(assets.value))
+    
+    await ipcRenderer.invoke('open-preview-window', {
+      data: dataClone,
+      assets: assetsClone
+    })
+  } catch (e: any) {
+    console.error('Open preview failed:', e)
+    alert('Failed to open preview: ' + e.message)
+  }
+  
+  isRendering.value = false
+}
+
+const changeView = (view: string) => {
+  activeView.value = view
 }
 
 const loadProject = async () => {
@@ -38,7 +60,6 @@ const loadProject = async () => {
       paperData.value = result.data
       assets.value = result.assets
       currentFilePath.value = result.filePath
-      triggerRender()
     }
   } catch (e: any) {
     alert('Failed to load: ' + e.message)
@@ -64,32 +85,11 @@ const saveProject = async () => {
 
 let renderTimeout: any = null
 const triggerRender = () => {
-  if (renderTimeout) clearTimeout(renderTimeout)
-  renderTimeout = setTimeout(() => {
-    renderPDF()
-  }, 1000) // Debounce 1s
+  // Real-time rendering is disabled
 }
 
 const renderPDF = async () => {
-  if (isRendering.value) return
-  isRendering.value = true
-  
-  try {
-    // Clone data to avoid proxy issues during IPC
-    const dataClone = JSON.parse(JSON.stringify(paperData.value))
-    const assetsClone = JSON.parse(JSON.stringify(assets.value))
-    
-    const pdfBase64 = await ipcRenderer.invoke('render-preview', {
-      data: dataClone,
-      assets: assetsClone
-    })
-    
-    pdfUrl.value = pdfBase64
-  } catch (e: any) {
-    console.error('Render failed:', e)
-  }
-  
-  isRendering.value = false
+  // Deprecated: Preview is now handled by openPreviewWindow
 }
 
 const scrollToBlock = (blockId: string) => {
@@ -110,7 +110,7 @@ const addAsset = (filename: string, base64: string) => {
 
 // Initial render
 onMounted(() => {
-  renderPDF()
+  // No initial render needed
 })
 </script>
 
@@ -123,23 +123,32 @@ onMounted(() => {
     
     <!-- Main Content (4-Column Layout) -->
     <div class="flex-1 flex overflow-hidden">
-      <!-- 1. Activity Bar (0.5) -->
-      <div class="flex-[0.5] min-w-[50px] max-w-[60px]">
-        <ActivityBar @toggle-preview="togglePreview" />
+      <!-- 1. Activity Bar (40px fixed) -->
+      <div class="w-[40px] flex-none border-r border-gray-800 bg-gray-900">
+        <ActivityBar 
+          :active-view="activeView"
+          :show-preview="false"
+          @toggle-preview="openPreviewWindow" 
+          @change-view="changeView"
+        />
       </div>
 
-      <!-- 2. Outline/Sidebar (1.5) -->
-      <div class="flex-[1.5] border-r border-gray-300 min-w-[150px]">
+      <!-- 2. Outline/Sidebar (240px fixed) -->
+      <div class="w-[240px] flex-none border-r border-gray-300 bg-white flex flex-col">
         <Sidebar 
+          v-show="activeView === 'file'"
           :blocks="paperData.body" 
           :info="paperData.paper_info"
           @jump="scrollToBlock"
           @change="triggerRender"
         />
+        <SearchSidebar v-if="activeView === 'search'" />
+        <VersionSidebar v-if="activeView === 'version'" />
+        <ResourceSidebar v-if="activeView === 'resources'" />
       </div>
 
-      <!-- 3. Editor (4.0) -->
-      <div class="flex-[4] border-r border-gray-300 min-w-[300px]">
+      <!-- 3. Editor (Flex 1) -->
+      <div class="flex-1 border-r border-gray-300 min-w-0 bg-white">
         <Editor 
           ref="editorRef"
           v-model="paperData.body" 
@@ -149,14 +158,16 @@ onMounted(() => {
         />
       </div>
 
-      <!-- 4. Copilot/Preview (4.0) -->
-      <div v-show="showPreview" class="flex-[4] min-w-[300px] flex flex-col bg-gray-50">
-        <!-- Copilot Header (Optional) -->
-        <!-- <div class="h-8 bg-gray-100 border-b border-gray-300 flex items-center px-2 text-xs font-bold text-gray-600">
-          Copilot / Preview
-        </div> -->
-        <Preview :pdfUrl="pdfUrl" :loading="isRendering" />
+      <!-- 4. Auxiliary/Copilot (Flex 1) -->
+      <div class="flex-1 min-w-0 bg-gray-50 flex flex-col">
+        <div class="h-8 bg-gray-100 border-b border-gray-300 flex items-center px-2 text-xs font-bold text-gray-600">
+          Assistant
+        </div>
+        <div class="flex-1 p-4 text-gray-400 text-sm text-center">
+          Assistant / Copilot Placeholder
+        </div>
       </div>
+
     </div>
   </div>
 </template>

@@ -2874,6 +2874,48 @@ electron.ipcMain.handle("render-preview", async (_, { data, assets }) => {
     throw new Error(e.message || "Render failed");
   }
 });
+let previewWin = null;
+electron.ipcMain.handle("open-preview-window", async (_, { data, assets }) => {
+  try {
+    const renderer = new TypstRenderer();
+    const typstContent = TypstRenderer.convertToTypst(data);
+    const tempDir = electron.app.getPath("temp");
+    const outputPath = path.join(tempDir, `preview-${Date.now()}.pdf`);
+    const assetBuffers = {};
+    if (assets) {
+      for (const [name, content] of Object.entries(assets)) {
+        if (typeof content === "string" && content.startsWith("data:")) {
+          const base64Data = content.split(",")[1];
+          assetBuffers[name] = Buffer.from(base64Data, "base64");
+        }
+      }
+    }
+    const pdfPath = await renderer.renderPDF(typstContent, outputPath, assetBuffers);
+    if (previewWin && !previewWin.isDestroyed()) {
+      previewWin.focus();
+    } else {
+      previewWin = new electron.BrowserWindow({
+        title: "PaperDraft - Preview",
+        icon: path.join(process.env.PUBLIC || "", "favicon.ico"),
+        width: 800,
+        height: 1e3,
+        autoHideMenuBar: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+      previewWin.on("closed", () => {
+        previewWin = null;
+      });
+    }
+    await previewWin.loadURL(`file://${pdfPath}`);
+    return true;
+  } catch (e) {
+    console.error("Open preview failed:", e);
+    throw new Error(e.message || "Open preview failed");
+  }
+});
 electron.ipcMain.handle("window-minimize", () => {
   win == null ? void 0 : win.minimize();
 });

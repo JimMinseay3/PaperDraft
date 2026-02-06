@@ -8,8 +8,10 @@ import Highlight from '@tiptap/extension-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu'
+import Dropcursor from '@tiptap/extension-dropcursor'
 import SlashCommand from './SlashCommandExtension'
 import ImageExtension from './ImageExtension'
+import DragHandle from './DragHandle.vue'
 import { watch, onBeforeUnmount, ref } from 'vue'
 import { 
   Plus, 
@@ -43,6 +45,7 @@ const emit = defineEmits<{
 }>()
 
 const fileInput = ref<HTMLInputElement | null>(null)
+const dragHandleRef = ref<InstanceType<typeof DragHandle> | null>(null)
 
 // Helper to map TipTap JSON to our Block structure
 const mapTipTapToBlocks = (json: any): Block[] => {
@@ -160,7 +163,58 @@ const GlobalId = Extension.create({
 
 const editor = useEditor({
   content: mapBlocksToTipTap(props.modelValue),
+  editorProps: {
+    handleDrop: (view, event, slice, moved) => {
+      const sourcePos = (window as any).__draggedNodePos
+      const isInternalDrag = event.dataTransfer?.getData('trae-drag-handle') === 'true'
+      
+      if (isInternalDrag && sourcePos !== null && sourcePos !== undefined) {
+        // If moved is true (due to our hack in DragHandle), ProseMirror handles the move logic automatically!
+        // It deletes the selection (which we set to source node) and inserts the slice.
+        // So we might NOT need to do anything if moved is true.
+        
+        // However, since we dragged an external element, PM might not set moved=true unless we hacked view.dragging.
+        // If our hack worked, 'moved' is true.
+        if (moved) {
+          // Clean up and let PM handle it
+          (window as any).__draggedNodePos = null
+          return false 
+        }
+
+        // If hack didn't work or moved is false, we handle it manually
+        const coords = { left: event.clientX, top: event.clientY }
+        const posResult = view.posAtCoords(coords)
+        
+        if (posResult) {
+           let targetPos = posResult.pos
+           const tr = view.state.tr
+           const node = view.state.doc.nodeAt(sourcePos)
+           if (!node) return false
+           
+           // Delete source
+           tr.delete(sourcePos, sourcePos + node.nodeSize)
+           
+           // Map targetPos because of deletion
+           const mappedTarget = tr.mapping.map(targetPos)
+           
+           // Insert
+           tr.insert(mappedTarget, node)
+           
+           view.dispatch(tr)
+           
+           // Clean up
+           ;(window as any).__draggedNodePos = null
+           return true // We handled it
+        }
+      }
+      return false
+    }
+  },
   extensions: [
+    Dropcursor.configure({
+      color: '#3b82f6',
+      width: 2,
+    }),
     StarterKit.configure({
       heading: {
         HTMLAttributes: {
@@ -214,6 +268,34 @@ const editor = useEditor({
           triggerImageUpload: () => () => {
             fileInput.value?.click()
             return true
+          }
+        }
+      }
+    }),
+    // Custom Keymap for Block Selection (Ctrl+A)
+    Extension.create({
+      name: 'blockSelection',
+      addKeyboardShortcuts() {
+        return {
+          'Mod-a': () => {
+            const { selection } = this.editor.state
+            const { $from, $to } = selection
+            
+            // If selection spans multiple blocks, let default handler take over (Select All)
+            if (!$from.sameParent($to)) {
+              return false
+            }
+            
+            const start = $from.start()
+            const end = $from.end()
+            
+            // If current block is already fully selected, let default handler take over (Select All)
+            if ($from.pos === start && $to.pos === end) {
+              return false
+            }
+            
+            // Select the current block content
+            return this.editor.commands.setTextSelection({ from: start, to: end })
           }
         }
       }
@@ -390,7 +472,16 @@ defineExpose({
 
 <template>
   <div class="editor-wrapper h-full bg-white overflow-y-auto">
-    <div class="editor-container max-w-4xl mx-auto py-12 px-16 min-h-full relative">
+    <div 
+      class="editor-container max-w-4xl mx-auto py-12 px-16 min-h-full relative"
+      @mousemove="dragHandleRef?.handleMouseMove($event)"
+    >
+      <DragHandle 
+        v-if="editor" 
+        ref="dragHandleRef" 
+        :editor="editor" 
+      />
+      
       <bubble-menu 
         v-if="editor" 
         :editor="editor" 

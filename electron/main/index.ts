@@ -196,6 +196,61 @@ ipcMain.handle('render-preview', async (_, { data, assets }) => {
   }
 })
 
+let previewWin: BrowserWindow | null = null
+
+ipcMain.handle('open-preview-window', async (_, { data, assets }) => {
+  try {
+    // 1. Generate PDF (Reuse render logic)
+    const renderer = new TypstRenderer()
+    const typstContent = TypstRenderer.convertToTypst(data)
+    
+    const tempDir = app.getPath('temp')
+    const outputPath = join(tempDir, `preview-${Date.now()}.pdf`)
+    
+    const assetBuffers: Record<string, Buffer> = {}
+    if (assets) {
+        for (const [name, content] of Object.entries(assets)) {
+            if (typeof content === 'string' && content.startsWith('data:')) {
+                const base64Data = content.split(',')[1]
+                assetBuffers[name] = Buffer.from(base64Data, 'base64')
+            }
+        }
+    }
+
+    const pdfPath = await renderer.renderPDF(typstContent, outputPath, assetBuffers)
+    
+    // 2. Open or Focus Preview Window
+    if (previewWin && !previewWin.isDestroyed()) {
+      previewWin.focus()
+    } else {
+      previewWin = new BrowserWindow({
+        title: 'PaperDraft - Preview',
+        icon: join(process.env.PUBLIC || '', 'favicon.ico'),
+        width: 800,
+        height: 1000,
+        autoHideMenuBar: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      })
+      
+      previewWin.on('closed', () => {
+        previewWin = null
+      })
+    }
+    
+    // 3. Load PDF
+    // Using file:// protocol to load the PDF directly
+    await previewWin.loadURL(`file://${pdfPath}`)
+    
+    return true
+  } catch (e: any) {
+    console.error("Open preview failed:", e)
+    throw new Error(e.message || "Open preview failed")
+  }
+})
+
 // Window Control Handlers
 ipcMain.handle('window-minimize', () => {
   win?.minimize()
