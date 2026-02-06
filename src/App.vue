@@ -8,6 +8,7 @@ import SearchSidebar from './components/SearchSidebar.vue'
 import VersionSidebar from './components/VersionSidebar.vue'
 import ResourceSidebar from './components/ResourceSidebar.vue'
 import Editor from './components/Editor.vue'
+import CommentList from './components/CommentList.vue'
 import type { PaperData } from './types/paper'
 
 // Initial State
@@ -28,6 +29,7 @@ const isRendering = ref(false)
 const editorRef = ref<any>(null)
 const activeView = ref('file')
 const showAssistant = ref(true)
+const documentComments = ref<any[]>([])
 
 // Actions
 const openPreviewWindow = async () => {
@@ -64,6 +66,30 @@ const loadProject = async () => {
     }
   } catch (e: any) {
     alert('Failed to load: ' + e.message)
+  }
+}
+
+const importWord = async () => {
+  try {
+    const result = await ipcRenderer.invoke('import-word')
+    if (result && result.html && editorRef.value?.editor) {
+      // Process HTML to replace text markers with extension tags
+      let html = result.html
+      html = html.replace(/__CR_(\d+)__/g, '<comment-mark id="$1"></comment-mark>')
+
+      // Use TipTap to parse HTML and insert it
+      editorRef.value.editor.commands.setContent(html, { emitUpdate: true })
+      
+      // Update comments
+      if (result.comments && result.comments.length > 0) {
+        documentComments.value = result.comments
+        showAssistant.value = true // Auto-open assistant to show comments
+      } else {
+        documentComments.value = []
+      }
+    }
+  } catch (e: any) {
+    alert('Failed to import Word file: ' + e.message)
   }
 }
 
@@ -109,9 +135,22 @@ const addAsset = (filename: string, base64: string) => {
   console.log('[App] Asset added:', filename)
 }
 
+const handleCommentSelected = (e: any) => {
+  const commentId = e.detail.id
+  console.log('Comment selected:', commentId)
+  
+  // Find comment in list and scroll to it
+  const commentEl = document.getElementById(`comment-card-${commentId}`)
+  if (commentEl) {
+    commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    commentEl.classList.add('ring-2', 'ring-blue-500')
+    setTimeout(() => commentEl.classList.remove('ring-2', 'ring-blue-500'), 2000)
+  }
+}
+
 // Initial render
 onMounted(() => {
-  // No initial render needed
+  window.addEventListener('comment-selected', handleCommentSelected)
 })
 </script>
 
@@ -120,6 +159,7 @@ onMounted(() => {
     <TitleBar 
       @open="loadProject"
       @save="saveProject"
+      @import-word="importWord"
       @toggle-assistant="showAssistant = !showAssistant"
     />
     
@@ -160,13 +200,14 @@ onMounted(() => {
         />
       </div>
 
-      <!-- 4. Auxiliary/Copilot (Flex 1) -->
-      <div v-show="showAssistant" class="flex-1 min-w-0 bg-gray-50 flex flex-col transition-all duration-300">
-        <div class="h-8 bg-gray-100 border-b border-gray-300 flex items-center px-2 text-xs font-bold text-gray-600">
-          Assistant
-        </div>
-        <div class="flex-1 p-4 text-gray-400 text-sm text-center">
-          Assistant / Copilot Placeholder
+      <!-- Right Sidebar (Assistant) -->
+      <div 
+        v-show="showAssistant" 
+        class="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 flex flex-col transition-all duration-300 border-l border-gray-200 dark:border-gray-800"
+      >
+        <CommentList v-if="documentComments.length > 0" :comments="documentComments" />
+        <div v-else class="flex-1 flex items-center justify-center text-gray-400 text-sm">
+          Assistant Area
         </div>
       </div>
 

@@ -9,6 +9,8 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu'
 import Dropcursor from '@tiptap/extension-dropcursor'
+import TextAlign from '@tiptap/extension-text-align'
+import CommentMark from './CommentMarkExtension'
 import SlashCommand from './SlashCommandExtension'
 import ImageExtension from './ImageExtension'
 import DragHandle from './DragHandle.vue'
@@ -272,11 +274,16 @@ const editor = useEditor({
         }
       }
     }),
-    // Custom Keymap for Block Selection (Ctrl+A)
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
+    CommentMark,
+    // Custom Keymap for Block Selection (Ctrl+A) and Center (Ctrl+E)
     Extension.create({
-      name: 'blockSelection',
+      name: 'customKeymaps',
       addKeyboardShortcuts() {
         return {
+          // Ctrl+A: Select current block
           'Mod-a': () => {
             const { selection } = this.editor.state
             const { $from, $to } = selection
@@ -296,6 +303,13 @@ const editor = useEditor({
             
             // Select the current block content
             return this.editor.commands.setTextSelection({ from: start, to: end })
+          },
+          // Ctrl+E: Toggle center alignment
+          'Mod-e': () => {
+            if (this.editor.isActive({ textAlign: 'center' })) {
+              return this.editor.commands.setTextAlign('left')
+            }
+            return this.editor.commands.setTextAlign('center')
           }
         }
       }
@@ -466,7 +480,8 @@ const scrollToBlock = (blockId: string) => {
 }
 
 defineExpose({
-  scrollToBlock
+  scrollToBlock,
+  editor
 })
 </script>
 

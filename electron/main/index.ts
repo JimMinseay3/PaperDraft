@@ -4,6 +4,9 @@ import { join } from 'path'
 import { PaperFileHandler } from './fileHandler'
 import { TypstRenderer } from './typstRenderer'
 import fs from 'fs'
+import mammoth from 'mammoth'
+import AdmZip from 'adm-zip'
+import { XMLParser } from 'fast-xml-parser'
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -140,6 +143,113 @@ ipcMain.handle('load-paper', async () => {
     return { data, assets: assetsBase64, filePath }
   } catch (e: any) {
     console.error('Load failed:', e)
+    throw e
+  }
+})
+
+// Helper function to extract comments from docx
+const extractComments = async (filePath: string) => {
+  console.log('Extracting comments from:', filePath)
+  try {
+    const zip = new AdmZip(filePath)
+    const commentsEntry = zip.getEntry('word/comments.xml')
+    if (!commentsEntry) {
+      console.log('No comments.xml found in docx')
+      return []
+    }
+
+    const xmlData = commentsEntry.getData().toString('utf8')
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_'
+    })
+    const result = parser.parse(xmlData)
+    
+    // Check if comments exist and navigate structure
+    // Structure is usually <w:comments><w:comment ...>...</w:comment></w:comments>
+    let comments = result['w:comments']?.['w:comment']
+    
+    if (!comments) return []
+    if (!Array.isArray(comments)) comments = [comments]
+
+    console.log(`Found ${comments.length} comments`)
+    return comments.map((c: any) => {
+      // Extract text from paragraphs within comment
+      // Comment structure often has w:p -> w:r -> w:t
+      let text = ''
+      const paragraphs = c['w:p'] ? (Array.isArray(c['w:p']) ? c['w:p'] : [c['w:p']]) : []
+      
+      paragraphs.forEach((p: any) => {
+        const runs = p['w:r'] ? (Array.isArray(p['w:r']) ? p['w:r'] : [p['w:r']]) : []
+        runs.forEach((r: any) => {
+          if (r['w:t']) {
+            text += (typeof r['w:t'] === 'object' ? r['w:t']['#text'] : r['w:t']) + ' '
+          }
+        })
+        text += '\n'
+      })
+
+      return {
+        id: c['@_w:id'],
+        author: c['@_w:author'],
+        date: c['@_w:date'],
+        content: text.trim()
+      }
+    })
+  } catch (e) {
+    console.error('Failed to extract comments:', e)
+    return []
+  }
+}
+
+// Helper to inject comment markers into document.xml before conversion
+const injectCommentMarkers = (buffer: Buffer): Buffer => {
+  try {
+    const zip = new AdmZip(buffer)
+    const docEntry = zip.getEntry('word/document.xml')
+    if (!docEntry) return buffer
+
+    let xml = docEntry.getData().toString('utf8')
+    
+    // Replace <w:commentReference w:id="X"/> with <w:t>__CR_X__</w:t>
+    // We use a regex that handles potential attributes
+    // Note: This assumes w:commentReference is inside a w:r, or at least where w:t is valid.
+    // If it's a self-closing tag:
+    xml = xml.replace(/<w:commentReference\s+[^>]*w:id=["'](\d+)["'][^>]*\/>/g, '<w:t>__CR_$1__</w:t>')
+    // If it's not self-closing (rare):
+    xml = xml.replace(/<w:commentReference\s+[^>]*w:id=["'](\d+)["'][^>]*>.*?<\/w:commentReference>/g, '<w:t>__CR_$1__</w:t>')
+
+    zip.updateFile('word/document.xml', Buffer.from(xml, 'utf8'))
+    return zip.toBuffer()
+  } catch (e) {
+    console.error('Failed to inject comment markers:', e)
+    return buffer
+  }
+}
+
+ipcMain.handle('import-word', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'Word Documents', extensions: ['docx'] }]
+  })
+  if (canceled || filePaths.length === 0) return null
+  
+  try {
+    const buffer = await fs.promises.readFile(filePaths[0])
+    
+    // Inject markers
+    const modifiedBuffer = injectCommentMarkers(buffer)
+    
+    // Convert modified buffer
+    const result = await mammoth.convertToHtml({ buffer: modifiedBuffer })
+    const comments = await extractComments(filePaths[0])
+    
+    return { 
+      html: result.value,
+      comments
+    }
+  } catch (e: any) {
+    console.error('Import failed:', e)
     throw e
   }
 })

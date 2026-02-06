@@ -9,6 +9,7 @@ const activeMenu = ref<string | null>(null)
 const emit = defineEmits<{
   (e: 'open'): void
   (e: 'save'): void
+  (e: 'import-word'): void
   (e: 'toggle-assistant'): void
 }>()
 
@@ -37,9 +38,10 @@ const closeMenu = () => {
   activeMenu.value = null
 }
 
-const handleAction = (action: 'open' | 'save') => {
+const handleAction = (action: 'open' | 'save' | 'import-word') => {
   if (action === 'open') emit('open')
   else if (action === 'save') emit('save')
+  else if (action === 'import-word') emit('import-word')
   closeMenu()
 }
 
@@ -94,6 +96,12 @@ onUnmounted(() => {
             >
               <span>Open File...</span>
               <span class="text-gray-500 text-[10px] group-hover:text-gray-300">Ctrl+O</span>
+            </div>
+            <div 
+              @click="handleAction('import-word')" 
+              class="px-4 py-1.5 hover:bg-blue-600 cursor-pointer flex justify-between items-center group"
+            >
+              <span>Import Word...</span>
             </div>
             <div 
               @click="handleAction('save')" 
