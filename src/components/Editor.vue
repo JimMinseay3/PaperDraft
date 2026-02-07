@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import { BubbleMenu } from '@tiptap/vue-3/menus'
-import { Extension } from '@tiptap/core'
+import { Extension, Mark, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
@@ -10,7 +10,11 @@ import TaskItem from '@tiptap/extension-task-item'
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu'
 import Dropcursor from '@tiptap/extension-dropcursor'
 import TextAlign from '@tiptap/extension-text-align'
+import FontFamily from '@tiptap/extension-font-family'
+import { TextStyle } from '@tiptap/extension-text-style'
+import { FontSize } from './FontSizeExtension'
 import CommentMark from './CommentMarkExtension'
+import CitationNode, { CitationSuggestion } from './CitationExtension'
 import SlashCommand from './SlashCommandExtension'
 import ImageExtension from './ImageExtension'
 import DragHandle from './DragHandle.vue'
@@ -29,15 +33,17 @@ import {
   Bold,
   Italic,
   Strikethrough,
-  Highlighter
+  Highlighter,
+  BookOpen
 } from 'lucide-vue-next'
-import type { Block } from '../types/paper'
+import type { Block, Reference } from '../types/paper'
 
 // const lowlight = createLowlight(common)
 
 const props = defineProps<{
   modelValue: Block[]
   assets?: Record<string, string> // Map of filename -> base64
+  references?: Reference[]
 }>()
 
 const emit = defineEmits<{
@@ -85,10 +91,17 @@ const mapTipTapToBlocks = (json: any): Block[] => {
       }
     }
 
+    // Improve content mapping to preserve mixed content (text + citations + marks)
+    let content = node.content || ''
+    if (Array.isArray(node.content) && node.content.length === 1 && node.content[0].type === 'text' && !node.content[0].marks) {
+      // Optimization: if it's just simple text, store as string
+      content = node.content[0].text
+    }
+
     return {
       id,
       type,
-      content: node.content?.[0]?.text || node.content || '',
+      content,
       attrs
     }
   })
@@ -163,6 +176,32 @@ const GlobalId = Extension.create({
   },
 })
 
+// Custom Mark for Flash Animation
+const FlashHighlight = Mark.create({
+  name: 'flashHighlight',
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'flash-highlight',
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span',
+        getAttrs: element => (element as HTMLElement).classList.contains('flash-highlight') && null,
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  },
+})
+
 const editor = useEditor({
   content: mapBlocksToTipTap(props.modelValue),
   editorProps: {
@@ -218,6 +257,7 @@ const editor = useEditor({
       width: 2,
     }),
     StarterKit.configure({
+      dropcursor: false, // Disable bundled dropcursor to avoid duplicate extension error
       heading: {
         HTMLAttributes: {
           class: 'heading-node',
@@ -260,6 +300,9 @@ const editor = useEditor({
         return 'Type \'/\' for commands...'
       },
     }),
+    TextStyle,
+    FontFamily,
+    FontSize,
     Highlight,
     SlashCommand,
     BubbleMenuExtension,
@@ -277,7 +320,22 @@ const editor = useEditor({
     TextAlign.configure({
       types: ['heading', 'paragraph'],
     }),
+    FlashHighlight,
     CommentMark,
+    CitationNode,
+    CitationSuggestion.configure({
+      suggestion: {
+        items: ({ query }: any) => {
+          const refs = props.references || []
+          return refs
+            .filter(item => 
+              item.title.toLowerCase().includes(query.toLowerCase()) || 
+              item.author.toLowerCase().includes(query.toLowerCase())
+            )
+            .slice(0, 10)
+        }
+      }
+    }),
     // Custom Keymap for Block Selection (Ctrl+A) and Center (Ctrl+E)
     Extension.create({
       name: 'customKeymaps',
@@ -393,8 +451,8 @@ const handleImageUpload = (event: Event) => {
   }
 }
 
-const scrollToBlock = (blockId: string) => {
-  console.log('[Editor] scrollToBlock called with ID:', blockId)
+const scrollToBlock = (blockId: string, highlightText?: string) => {
+  console.log('[Editor] scrollToBlock called with ID:', blockId, 'with text:', highlightText)
   if (!editor.value) {
     console.error('[Editor] TipTap editor instance is null')
     return
@@ -455,12 +513,63 @@ const scrollToBlock = (blockId: string) => {
         // Focus AFTER scrolling to prevent browser from scrolling to top first
         editor.value?.commands.focus()
 
-        // Add a temporary highlight effect to show where we jumped
-        const originalBg = (element as HTMLElement).style.backgroundColor
-        ;(element as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.1)'
-        setTimeout(() => {
-          ;(element as HTMLElement).style.backgroundColor = originalBg
-        }, 1000)
+        // Flash highlight effect
+        if (highlightText && node) {
+          // Highlight specific text
+          const textContent = node.textContent
+          const lowerText = textContent.toLowerCase()
+          const lowerQuery = highlightText.toLowerCase()
+          const index = lowerText.indexOf(lowerQuery)
+          
+          if (index !== -1) {
+            // Calculate absolute position range
+            // pos points to the start of the node. content starts at pos + 1
+            const from = pos + 1 + index
+            const to = from + highlightText.length
+            
+            // Apply Flash Mark and immediately collapse selection
+            // This prevents the blue selection overlay from hiding the flash effect
+            editor.value?.chain()
+              .setTextSelection({ from, to })
+              .setMark('flashHighlight')
+              .setTextSelection(to)
+              .run()
+            
+            // Remove after animation using a transaction scan
+            // This is safer than relying on stale coordinates if user types
+            setTimeout(() => {
+              if (!editor.value) return
+              const { state, view } = editor.value
+              const tr = state.tr
+              const markType = state.schema.marks.flashHighlight
+              let modified = false
+
+              state.doc.descendants((node, pos) => {
+                if (node.isText && node.marks) {
+                   const hasFlash = node.marks.find(m => m.type.name === 'flashHighlight')
+                   if (hasFlash) {
+                     tr.removeMark(pos, pos + node.nodeSize, markType)
+                     modified = true
+                   }
+                }
+              })
+              
+              if (modified) {
+                 view.dispatch(tr)
+              }
+            }, 1500)
+          }
+        } else {
+          // Fallback: Highlight entire block
+          element.classList.remove('flash-highlight')
+          void element.offsetWidth // Trigger reflow
+          element.classList.add('flash-highlight')
+          
+          // Remove class after animation
+          setTimeout(() => {
+            element.classList.remove('flash-highlight')
+          }, 2000)
+        }
       } else {
         console.warn('[Editor] DOM element not found for ID, falling back to scrollIntoView()')
         // Fallback: use TipTap's internal scroll
@@ -479,9 +588,111 @@ const scrollToBlock = (blockId: string) => {
   }
 }
 
+const moveSection = ({ fromId, toId, position }: { fromId: string, toId: string, position: 'top' | 'bottom' }) => {
+  if (!editor.value) return
+  
+  const { state, view } = editor.value
+  const { doc } = state
+  
+  // 1. Find Source Node and Position
+  let sourcePos = -1
+  let sourceNode: any = null
+  
+  doc.descendants((node, pos) => {
+    if (node.attrs.id === fromId) {
+      sourcePos = pos
+      sourceNode = node
+      return false // Stop traversal
+    }
+  })
+  
+  if (sourcePos === -1 || !sourceNode) return
+  
+  // 2. Find Source End (include content until next heading of same or higher level)
+  const sourceLevel = sourceNode.attrs.level || 1
+  let sourceEndPos = doc.content.size
+  
+  doc.nodesBetween(sourcePos + sourceNode.nodeSize, doc.content.size, (node, pos) => {
+    if (node.type.name === 'heading') {
+      const level = node.attrs.level || 1
+      if (level <= sourceLevel) {
+        sourceEndPos = pos
+        return false // Stop traversal
+      }
+    }
+  })
+  
+  // 3. Find Target Node and Position
+  let targetPos = -1
+  let targetNode: any = null
+  
+  doc.descendants((node, pos) => {
+    if (node.attrs.id === toId) {
+      targetPos = pos
+      targetNode = node
+      return false
+    }
+  })
+  
+  if (targetPos === -1 || !targetNode) return
+  
+  // 4. Calculate Insertion Point
+  let insertPos = targetPos
+  
+  if (position === 'bottom') {
+    // If dropping bottom, insert AFTER the target section
+    const targetLevel = targetNode.attrs.level || 1
+    let targetEndPos = doc.content.size
+    
+    doc.nodesBetween(targetPos + targetNode.nodeSize, doc.content.size, (node, pos) => {
+      if (node.type.name === 'heading') {
+        const level = node.attrs.level || 1
+        if (level <= targetLevel) {
+          targetEndPos = pos
+          return false
+        }
+      }
+    })
+    insertPos = targetEndPos
+  }
+  
+  // 5. Validation: Cannot move into itself
+  if (insertPos > sourcePos && insertPos < sourceEndPos) {
+    console.warn('Cannot move section into itself')
+    return
+  }
+  
+  // 6. Perform Transaction
+  const tr = state.tr
+  const slice = state.doc.slice(sourcePos, sourceEndPos)
+  
+  // Delete source first? Or Insert first?
+  // If we delete first, positions shift.
+  // It's easier to use mapping or delete first and calculate shift.
+  
+  if (insertPos < sourcePos) {
+    // Moving UP
+    tr.delete(sourcePos, sourceEndPos)
+    tr.insert(insertPos, slice.content)
+  } else {
+    // Moving DOWN
+    // The insert position is AFTER the source, so when we delete source, 
+    // the insert position shifts by -(sourceEndPos - sourcePos)
+    const size = sourceEndPos - sourcePos
+    tr.delete(sourcePos, sourceEndPos)
+    tr.insert(insertPos - size, slice.content)
+  }
+  
+  view.dispatch(tr)
+  
+  // Focus editor
+  view.focus()
+}
+
 defineExpose({
   scrollToBlock,
-  editor
+  editor,
+  moveSection
 })
 </script>
 
@@ -501,8 +712,39 @@ defineExpose({
         v-if="editor" 
         :editor="editor" 
         :tippy-options="{ duration: 100 }"
-        class="flex bg-gray-900 text-white rounded-lg shadow-xl overflow-hidden divide-x divide-gray-700 p-1"
+        class="flex items-center bg-gray-900 text-white rounded-lg shadow-xl overflow-hidden divide-x divide-gray-700 p-1"
       >
+        <!-- Font Family Selector -->
+        <select 
+          @change="editor.chain().focus().setFontFamily(($event.target as HTMLSelectElement).value).run()"
+          class="bg-gray-900 text-xs text-white p-1.5 outline-none border-none hover:bg-gray-700 transition-colors w-20"
+        >
+          <option value="" disabled selected>Font</option>
+          <option value="SimSun">宋体</option>
+          <option value="SimHei">黑体</option>
+          <option value="FangSong">仿宋</option>
+          <option value="KaiTi">楷体</option>
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times</option>
+        </select>
+
+        <!-- Font Size Selector -->
+        <select 
+          @change="editor.chain().focus().setFontSize(($event.target as HTMLSelectElement).value).run()"
+          class="bg-gray-900 text-xs text-white p-1.5 outline-none border-none hover:bg-gray-700 transition-colors w-16"
+        >
+          <option value="" disabled selected>Size</option>
+          <option value="12pt">小四</option>
+          <option value="14pt">四号</option>
+          <option value="16pt">三号</option>
+          <option value="18pt">小二</option>
+          <option value="22pt">二号</option>
+          <option value="24pt">小一</option>
+          <option value="26pt">一号</option>
+          <option value="36pt">小初</option>
+          <option value="42pt">初号</option>
+        </select>
+
         <button 
           @click="editor.chain().focus().toggleBold().run()" 
           :class="{ 'bg-gray-700': editor.isActive('bold') }"
@@ -634,6 +876,20 @@ defineExpose({
   flex: 1 1 auto;
 }
 
+@keyframes flash-highlight {
+  0% { background-color: rgba(59, 130, 246, 0.3); }
+  25% { background-color: transparent; }
+  50% { background-color: rgba(59, 130, 246, 0.3); }
+  100% { background-color: transparent; }
+}
+
+.flash-highlight {
+  animation: flash-highlight 1.5s ease-out;
+  display: inline;
+  color: inherit;
+  border-radius: 2px;
+}
+
 /* Code Block Styles */
 .ProseMirror pre {
   background: #1e1e1e;
@@ -671,4 +927,19 @@ defineExpose({
 .prose h1 { font-size: 2.25rem; font-weight: 700; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
 .prose h2 { font-size: 1.5rem; font-weight: 600; margin-top: 1.5em; }
 .prose h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.2em; }
+
+/* Citation Chip Style */
+.citation-chip {
+  display: inline-block;
+  background-color: #e0f2fe; /* blue-100 */
+  color: #0369a1; /* blue-800 */
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  margin: 0 2px;
+  vertical-align: baseline;
+}
 </style>

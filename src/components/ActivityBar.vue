@@ -3,10 +3,15 @@ import {
   Files, 
   Search, 
   Eye, 
-  GitBranch, 
+  Clock, 
   Package, 
-  Settings 
+  Settings,
+  BookOpen
 } from 'lucide-vue-next'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   activeView: string
@@ -18,13 +23,15 @@ const emit = defineEmits<{
   (e: 'change-view', view: string): void
 }>()
 
-const menuItems = [
-  { id: 'file', icon: Files, title: 'File' },
-  { id: 'search', icon: Search, title: 'Search' },
-  { id: 'resources', icon: Package, title: 'Resource Explorer' },
-  { id: 'version', icon: GitBranch, title: 'Version Management' },
-  { id: 'preview', icon: Eye, title: 'Preview' },
-]
+const menuItems = computed(() => [
+  { id: 'file', icon: Files, title: t('activityBar.file') },
+  { id: 'search', icon: Search, title: t('activityBar.search') },
+  { id: 'citations', icon: BookOpen, title: t('activityBar.citations') },
+  { id: 'resources', icon: Package, title: t('activityBar.resources') },
+  { id: 'version', icon: Clock, title: t('activityBar.version') },
+  { id: 'preview', icon: Eye, title: t('activityBar.preview') },
+  { id: 'settings', icon: Settings, title: t('activityBar.settings') },
+])
 
 const handleClick = (id: string) => {
   if (id === 'preview') {

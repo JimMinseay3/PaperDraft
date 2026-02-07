@@ -4,6 +4,7 @@ import path from 'path'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import Inspector from 'unplugin-vue-dev-locator/vite'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -12,6 +13,7 @@ export default defineConfig({
   },
   plugins: [
     vue(),
+    // VueI18nPlugin removed to rely on runtime JIT compilation (unsafe-eval enabled in CSP)
     electron([
       {
         // Main-Process entry file of the Electron App.
@@ -45,6 +47,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'vue-i18n': 'vue-i18n/dist/vue-i18n.esm-bundler.js',
     },
   },
 })

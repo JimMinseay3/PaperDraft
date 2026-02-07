@@ -2,6 +2,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ipcRenderer } from 'electron'
 import { PanelLeft, Settings, User } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const isMaximized = ref(false)
 const activeMenu = ref<string | null>(null)
@@ -85,7 +88,7 @@ onUnmounted(() => {
             class="menu-trigger h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center transition-colors"
             :class="{ 'bg-gray-700 text-white': activeMenu === 'file' }"
           >
-            File(F)
+            {{ t('menu.file') }}
           </button>
           
           <!-- Dropdown -->
@@ -94,20 +97,20 @@ onUnmounted(() => {
               @click="handleAction('open')" 
               class="px-4 py-1.5 hover:bg-blue-600 cursor-pointer flex justify-between items-center group"
             >
-              <span>Open File...</span>
+              <span>{{ t('menu.open') }}</span>
               <span class="text-gray-500 text-[10px] group-hover:text-gray-300">Ctrl+O</span>
             </div>
             <div 
               @click="handleAction('import-word')" 
               class="px-4 py-1.5 hover:bg-blue-600 cursor-pointer flex justify-between items-center group"
             >
-              <span>Import Word...</span>
+              <span>{{ t('menu.importWord') }}</span>
             </div>
             <div 
               @click="handleAction('save')" 
               class="px-4 py-1.5 hover:bg-blue-600 cursor-pointer flex justify-between items-center group"
             >
-              <span>Save Project</span>
+              <span>{{ t('menu.save') }}</span>
               <span class="text-gray-500 text-[10px] group-hover:text-gray-300">Ctrl+S</span>
             </div>
             <div class="my-1 border-t border-gray-700"></div>
@@ -115,16 +118,16 @@ onUnmounted(() => {
               @click="close" 
               class="px-4 py-1.5 hover:bg-red-600 cursor-pointer flex justify-between items-center group"
             >
-              <span>Exit</span>
+              <span>{{ t('menu.exit') }}</span>
               <span class="text-gray-500 text-[10px] group-hover:text-gray-300">Alt+F4</span>
             </div>
           </div>
         </div>
 
         <!-- Placeholder Menus -->
-        <button class="h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center text-gray-500 cursor-not-allowed">Edit(E)</button>
-        <button class="h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center text-gray-500 cursor-not-allowed">View(V)</button>
-        <button class="h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center text-gray-500 cursor-not-allowed">Help(H)</button>
+        <button class="h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center text-gray-500 cursor-not-allowed">{{ t('menu.edit') }}</button>
+        <button class="h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center text-gray-500 cursor-not-allowed">{{ t('menu.view') }}</button>
+        <button class="h-full px-2 hover:bg-gray-700 rounded-sm focus:outline-none flex items-center text-gray-500 cursor-not-allowed">{{ t('menu.help') }}</button>
       </div>
     </div>
 
@@ -138,7 +141,7 @@ onUnmounted(() => {
         </div>
         <input 
           type="text" 
-          placeholder="Search for command or content..."
+          :placeholder="t('titleBar.searchPlaceholder')"
           class="w-full bg-gray-800 border border-gray-700 rounded-md py-0.5 pl-8 pr-3 text-[11px] text-gray-300 focus:outline-none focus:bg-gray-700 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-gray-600"
         />
       </div>
@@ -151,14 +154,14 @@ onUnmounted(() => {
         <button 
           @click="emit('toggle-assistant')"
           class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" 
-          title="Toggle Assistant"
+          :title="t('titleBar.toggleAssistant')"
         >
           <PanelLeft class="w-3.5 h-3.5" stroke-width="2" />
         </button>
-        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" title="Settings">
+        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" :title="t('titleBar.settings')">
           <Settings class="w-3.5 h-3.5" stroke-width="2" />
         </button>
-        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" title="User">
+        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" :title="t('titleBar.user')">
           <User class="w-3.5 h-3.5" stroke-width="2" />
         </button>
       </div>
@@ -166,14 +169,14 @@ onUnmounted(() => {
       <!-- Window Controls -->
       <div class="flex h-full min-w-[120px] justify-end">
       <!-- Minimize -->
-      <button @click="minimize" class="w-10 h-full flex items-center justify-center hover:bg-gray-700 transition-colors focus:outline-none" title="Minimize">
+      <button @click="minimize" class="w-10 h-full flex items-center justify-center hover:bg-gray-700 transition-colors focus:outline-none" :title="t('titleBar.minimize')">
         <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
           <rect width="10" height="1" />
         </svg>
       </button>
 
       <!-- Maximize / Restore -->
-      <button @click="maximize" class="w-10 h-full flex items-center justify-center hover:bg-gray-700 transition-colors focus:outline-none" :title="isMaximized ? 'Restore' : 'Maximize'">
+      <button @click="maximize" class="w-10 h-full flex items-center justify-center hover:bg-gray-700 transition-colors focus:outline-none" :title="isMaximized ? t('titleBar.restore') : t('titleBar.maximize')">
         <svg v-if="!isMaximized" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1">
           <rect x="1.5" y="1.5" width="7" height="7" />
         </svg>
@@ -184,7 +187,7 @@ onUnmounted(() => {
       </button>
 
       <!-- Close -->
-      <button @click="close" class="w-10 h-full flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors focus:outline-none" title="Close">
+      <button @click="close" class="w-10 h-full flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors focus:outline-none" :title="t('titleBar.close')">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1">
           <path d="M1 1L9 9" />
           <path d="M9 1L1 9" />

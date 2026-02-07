@@ -1,0 +1,82 @@
+{
+  "activityBar": {
+    "file": "文件",
+    "search": "搜索",
+    "citations": "引用",
+    "resources": "资源",
+    "version": "版本控制",
+    "preview": "预览",
+    "settings": "设置"
+  },
+  "menu": {
+    "file": "文件(F)",
+    "edit": "编辑(E)",
+    "view": "视图(V)",
+    "help": "帮助(H)",
+    "open": "打开文件...",
+    "save": "保存文件",
+    "importWord": "导入 Word",
+    "exit": "退出",
+    "assistant": "切换助手"
+  },
+  "titleBar": {
+    "searchPlaceholder": "搜索命令或内容...",
+    "toggleAssistant": "切换助手",
+    "settings": "设置",
+    "user": "用户",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "恢复",
+    "close": "关闭"
+  },
+  "sidebar": {
+    "metadata": "元数据",
+    "title": "标题",
+    "author": "作者",
+    "school": "学校",
+    "titlePlaceholder": "论文标题",
+    "authorPlaceholder": "作者姓名",
+    "schoolPlaceholder": "学校 / 机构",
+    "outline": "大纲",
+    "expandAll": "展开全部",
+    "collapseAll": "折叠全部",
+    "noHeadings": "未找到标题",
+    "untitled": "无标题"
+  },
+  "resources": {
+    "title": "资源管理器",
+    "images": "图片",
+    "noImages": "未找到图片",
+    "untitledImage": "无标题图片",
+    "tables": "表格",
+    "noTables": "未找到表格",
+    "table": "表格"
+  },
+  "version": {
+    "title": "版本历史",
+    "createSnapshot": "创建快照",
+    "noSnapshots": "暂无快照",
+    "compare": "比对",
+    "modalTitle": "创建新快照",
+    "placeholder": "这一版主要改了什么？",
+    "cancel": "取消",
+    "save": "保存",
+    "autoSave": "自动保存",
+    "manual": "手动",
+    "words": "字"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "theme": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色 (即将推出)",
+    "about": "关于"
+  },
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除"
+  }
+}

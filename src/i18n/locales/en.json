@@ -1,0 +1,82 @@
+{
+  "activityBar": {
+    "file": "File",
+    "search": "Search",
+    "citations": "Citations",
+    "resources": "Resources",
+    "version": "Version Control",
+    "preview": "Preview",
+    "settings": "Settings"
+  },
+  "menu": {
+    "file": "File(F)",
+    "edit": "Edit(E)",
+    "view": "View(V)",
+    "help": "Help(H)",
+    "open": "Open File...",
+    "save": "Save File",
+    "importWord": "Import Word",
+    "exit": "Exit",
+    "assistant": "Toggle Assistant"
+  },
+  "titleBar": {
+    "searchPlaceholder": "Search for command or content...",
+    "toggleAssistant": "Toggle Assistant",
+    "settings": "Settings",
+    "user": "User",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "sidebar": {
+    "metadata": "Metadata",
+    "title": "Title",
+    "author": "Author",
+    "school": "School",
+    "titlePlaceholder": "Paper Title",
+    "authorPlaceholder": "Author Name",
+    "schoolPlaceholder": "School / Affiliation",
+    "outline": "Outline",
+    "expandAll": "Expand All",
+    "collapseAll": "Collapse All",
+    "noHeadings": "No headings found",
+    "untitled": "Untitled"
+  },
+  "resources": {
+    "title": "Resources",
+    "images": "Images",
+    "noImages": "No images found",
+    "untitledImage": "Untitled Image",
+    "tables": "Tables",
+    "noTables": "No tables found",
+    "table": "Table"
+  },
+  "version": {
+    "title": "Version History",
+    "createSnapshot": "Create Snapshot",
+    "noSnapshots": "No snapshots yet",
+    "compare": "Compare",
+    "modalTitle": "Create New Snapshot",
+    "placeholder": "What changed in this version?",
+    "cancel": "Cancel",
+    "save": "Save",
+    "autoSave": "Auto-save",
+    "manual": "Manual",
+    "words": "words"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark (Coming Soon)",
+    "about": "About"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete"
+  }
+}

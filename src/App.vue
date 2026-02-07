@@ -7,9 +7,11 @@ import Sidebar from './components/Sidebar.vue'
 import SearchSidebar from './components/SearchSidebar.vue'
 import VersionSidebar from './components/VersionSidebar.vue'
 import ResourceSidebar from './components/ResourceSidebar.vue'
+import CitationSidebar from './components/CitationSidebar.vue'
+import SettingsSidebar from './components/SettingsSidebar.vue'
 import Editor from './components/Editor.vue'
 import CommentList from './components/CommentList.vue'
-import type { PaperData } from './types/paper'
+import type { PaperData, Reference } from './types/paper'
 
 // Initial State
 const paperData = ref<PaperData>({
@@ -119,14 +121,9 @@ const renderPDF = async () => {
   // Deprecated: Preview is now handled by openPreviewWindow
 }
 
-const scrollToBlock = (blockId: string) => {
-  console.log('[App] Received jump request for block:', blockId)
+const scrollToBlock = (blockId: string, highlightText?: string) => {
   if (editorRef.value) {
-    console.log('[App] Calling editorRef.scrollToBlock')
-    editorRef.value.scrollToBlock(blockId)
-  } else {
-    console.error('[App] editorRef is null!')
-    alert('Debug: Editor reference is missing!')
+    editorRef.value.scrollToBlock(blockId, highlightText)
   }
 }
 
@@ -148,9 +145,45 @@ const handleCommentSelected = (e: any) => {
   }
 }
 
+const handleAddReference = (ref: Reference) => {
+  if (!paperData.value.references) {
+    paperData.value.references = []
+  }
+  paperData.value.references.push(ref)
+}
+
+const handleRemoveReference = (id: string) => {
+  if (!paperData.value.references) return
+  paperData.value.references = paperData.value.references.filter(r => r.id !== id)
+}
+
+const handleMoveSection = (event: { fromId: string, toId: string, position: 'top' | 'bottom' }) => {
+  if (editorRef.value) {
+    editorRef.value.moveSection(event)
+  }
+}
+
 // Initial render
 onMounted(() => {
   window.addEventListener('comment-selected', handleCommentSelected)
+
+  // Auto-save Snapshot every 30 minutes
+  setInterval(async () => {
+    if (currentFilePath.value && paperData.value) {
+      try {
+        console.log('[AutoSave] Creating auto snapshot...')
+        await ipcRenderer.invoke('create-snapshot', {
+          filePath: currentFilePath.value,
+          data: paperData.value,
+          note: 'Auto-save',
+          type: 'auto'
+        })
+        console.log('[AutoSave] Snapshot created')
+      } catch (e) {
+        console.error('[AutoSave] Failed:', e)
+      }
+    }
+  }, 30 * 60 * 1000) // 30 minutes
 })
 </script>
 
@@ -183,10 +216,30 @@ onMounted(() => {
           :info="paperData.paper_info"
           @jump="scrollToBlock"
           @change="triggerRender"
+          @move-section="handleMoveSection"
         />
-        <SearchSidebar v-if="activeView === 'search'" />
-        <VersionSidebar v-if="activeView === 'version'" />
-        <ResourceSidebar v-if="activeView === 'resources'" />
+        <SearchSidebar 
+          v-if="activeView === 'search'" 
+          :blocks="paperData.body"
+          @jump="(id, query) => scrollToBlock(id, query)"
+        />
+        <VersionSidebar 
+          v-if="activeView === 'version'" 
+          :current-file-path="currentFilePath"
+          :paper-data="paperData"
+        />
+        <ResourceSidebar 
+          v-if="activeView === 'resources'" 
+          :blocks="paperData.body"
+          :assets="assets"
+        />
+        <CitationSidebar 
+          v-if="activeView === 'citations'"
+          :references="paperData.references || []"
+          @add-reference="handleAddReference"
+          @remove-reference="handleRemoveReference"
+        />
+        <SettingsSidebar v-if="activeView === 'settings'" />
       </div>
 
       <!-- 3. Editor (Flex 1) -->
@@ -195,6 +248,7 @@ onMounted(() => {
           ref="editorRef"
           v-model="paperData.body" 
           :assets="assets"
+          :references="paperData.references || []"
           @change="triggerRender" 
           @add-asset="addAsset"
         />

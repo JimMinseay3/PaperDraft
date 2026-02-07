@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Block } from '../types/paper'
 import { ChevronDown, ChevronRight, PlusSquare, MinusSquare } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   blocks: Block[]
@@ -11,11 +14,61 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'jump', blockId: string): void
   (e: 'change'): void
+  (e: 'move-section', payload: { fromId: string; toId: string; position: 'top' | 'bottom' }): void
 }>()
 
 const isOutlineOpen = ref(true)
 const isMetadataOpen = ref(true)
 const collapsedIds = ref(new Set<string>())
+const dragOverId = ref<string | null>(null)
+const dropPosition = ref<'top' | 'bottom' | null>(null)
+
+// Drag and Drop Logic
+const handleDragStart = (event: DragEvent, blockId: string) => {
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', blockId)
+    // Add a ghost image or styling if needed
+  }
+}
+
+const handleDragOver = (event: DragEvent, blockId: string) => {
+  event.preventDefault() // Allow drop
+  if (!event.dataTransfer) return
+
+  const targetId = blockId
+  // Don't allow dropping onto itself
+  // Note: We can't easily check sourceId here in dragover (security restriction), 
+  // but we can check later or use a global var if strictly needed. 
+  // For visual feedback, it's okay.
+  
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const midY = rect.top + rect.height / 2
+  const position = event.clientY < midY ? 'top' : 'bottom'
+  
+  dragOverId.value = targetId
+  dropPosition.value = position
+}
+
+const handleDrop = (event: DragEvent, targetBlockId: string) => {
+  event.preventDefault()
+  const sourceId = event.dataTransfer?.getData('text/plain')
+  
+  if (sourceId && sourceId !== targetBlockId) {
+    emit('move-section', { 
+      fromId: sourceId, 
+      toId: targetBlockId, 
+      position: dropPosition.value || 'bottom'
+    })
+  }
+  
+  resetDragState()
+}
+
+const resetDragState = () => {
+  dragOverId.value = null
+  dropPosition.value = null
+}
 
 // Filter only headings for the outline
 const headings = (blocks: Block[]) => {
@@ -121,35 +174,35 @@ const updateInfo = () => {
         @click="isMetadataOpen = !isMetadataOpen"
       >
         <component :is="isMetadataOpen ? ChevronDown : ChevronRight" class="w-4 h-4 text-gray-500 mr-2" />
-        <span class="text-xs font-bold text-gray-700 uppercase">Metadata</span>
+        <span class="text-xs font-bold text-gray-700 uppercase">{{ t('sidebar.metadata') }}</span>
       </div>
 
       <div v-show="isMetadataOpen" class="p-3 space-y-2">
         <div>
-          <label class="block text-xs text-gray-400">Title</label>
+          <label class="block text-xs text-gray-400">{{ t('sidebar.title') }}</label>
           <input 
             v-model="info.title" 
             @input="updateInfo"
             class="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            placeholder="Paper Title"
+            :placeholder="t('sidebar.titlePlaceholder')"
           />
         </div>
         <div>
-          <label class="block text-xs text-gray-400">Author</label>
+          <label class="block text-xs text-gray-400">{{ t('sidebar.author') }}</label>
           <input 
             v-model="info.author" 
             @input="updateInfo"
             class="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            placeholder="Author Name"
+            :placeholder="t('sidebar.authorPlaceholder')"
           />
         </div>
         <div>
-          <label class="block text-xs text-gray-400">School</label>
+          <label class="block text-xs text-gray-400">{{ t('sidebar.school') }}</label>
           <input 
             v-model="info.school" 
             @input="updateInfo"
             class="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            placeholder="School / Affiliation"
+            :placeholder="t('sidebar.schoolPlaceholder')"
           />
         </div>
       </div>
@@ -163,14 +216,14 @@ const updateInfo = () => {
       >
         <div class="flex items-center">
           <component :is="isOutlineOpen ? ChevronDown : ChevronRight" class="w-4 h-4 text-gray-500 mr-2" />
-          <span class="text-xs font-bold text-gray-700 uppercase">Outline</span>
+          <span class="text-xs font-bold text-gray-700 uppercase">{{ t('sidebar.outline') }}</span>
         </div>
         <!-- Expand/Collapse All Buttons -->
         <div v-if="isOutlineOpen" class="flex items-center space-x-1">
-          <button @click.stop="expandAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" title="Expand All">
+          <button @click.stop="expandAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" :title="t('sidebar.expandAll')">
             <PlusSquare class="w-3.5 h-3.5" />
           </button>
-          <button @click.stop="collapseAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" title="Collapse All">
+          <button @click.stop="collapseAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" :title="t('sidebar.collapseAll')">
             <MinusSquare class="w-3.5 h-3.5" />
           </button>
         </div>
@@ -178,19 +231,28 @@ const updateInfo = () => {
       
       <div v-show="isOutlineOpen" class="flex-1 overflow-y-auto p-2 max-h-[50vh]">
         <div v-if="visibleItems.length === 0" class="text-gray-400 text-sm italic p-2">
-          No headings found
+          {{ t('sidebar.noHeadings') }}
         </div>
         <ul class="space-y-1">
           <li 
             v-for="block in visibleItems" 
             :key="block.id"
-            class="group cursor-pointer hover:bg-gray-200 rounded py-1 text-sm truncate flex items-center"
+            draggable="true"
+            @dragstart="handleDragStart($event, block.id)"
+            @dragover="handleDragOver($event, block.id)"
+            @drop="handleDrop($event, block.id)"
+            @dragend="resetDragState"
+            @dragleave="resetDragState"
+            class="group cursor-pointer hover:bg-gray-200 rounded py-1 text-sm truncate flex items-center transition-all duration-200 relative"
             :class="{
               'pl-2': !block.attrs?.level || block.attrs.level === 1,
               'pl-4': block.attrs?.level === 2,
               'pl-6': block.attrs?.level && block.attrs.level >= 3,
               'font-bold': !block.attrs?.level || block.attrs.level === 1,
-              'text-gray-600': block.attrs?.level && block.attrs.level >= 3
+              'text-gray-600': block.attrs?.level && block.attrs.level >= 3,
+              'bg-blue-50': dragOverId === block.id,
+              'border-t-2 border-t-blue-500': dragOverId === block.id && dropPosition === 'top',
+              'border-b-2 border-b-blue-500': dragOverId === block.id && dropPosition === 'bottom'
             }"
             @click="jumpToBlock(block.id)"
           >
@@ -206,7 +268,7 @@ const updateInfo = () => {
               />
             </div>
             
-            <span class="truncate">{{ block.content || 'Untitled' }}</span>
+            <span class="truncate">{{ block.content || t('sidebar.untitled') }}</span>
           </li>
         </ul>
       </div>

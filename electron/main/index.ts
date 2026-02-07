@@ -265,17 +265,33 @@ ipcMain.handle('save-paper', async (_, { filePath, data, assets }) => {
   }
   
   // Convert base64 assets back to buffers
-  const assetBuffers: Record<string, Buffer> = {}
-  if (assets) {
-      for (const [name, content] of Object.entries(assets)) {
-          if (typeof content === 'string' && content.startsWith('data:')) {
-              const base64Data = content.split(',')[1]
-              assetBuffers[name] = Buffer.from(base64Data, 'base64')
-          }
-      }
-  }
+    const assetBuffers: Record<string, Buffer> = {}
+    if (assets) {
+        for (const [name, content] of Object.entries(assets)) {
+            if (typeof content === 'string' && content.startsWith('data:')) {
+                const base64Data = content.split(',')[1]
+                assetBuffers[name] = Buffer.from(base64Data, 'base64')
+            }
+        }
+    }
 
-  return await PaperFileHandler.savePaper(targetPath, data, assetBuffers)
+    return await PaperFileHandler.savePaper(targetPath, data, assetBuffers)
+})
+
+// Version Control Handlers
+ipcMain.handle('get-snapshots', async (_, { filePath }) => {
+  if (!filePath) return []
+  return await PaperFileHandler.getSnapshots(filePath)
+})
+
+ipcMain.handle('create-snapshot', async (_, { filePath, data, note, type }) => {
+  if (!filePath) throw new Error('File not saved yet')
+  return await PaperFileHandler.createSnapshot(filePath, data, note, type)
+})
+
+ipcMain.handle('load-snapshot', async (_, { filePath, snapshotId }) => {
+  if (!filePath) throw new Error('File path required')
+  return await PaperFileHandler.loadSnapshot(filePath, snapshotId)
 })
 
 ipcMain.handle('render-preview', async (_, { data, assets }) => {
@@ -310,6 +326,47 @@ let previewWin: BrowserWindow | null = null
 
 ipcMain.handle('open-preview-window', async (_, { data, assets }) => {
   try {
+    // 0. Pre-process data to ensure images have filenames and assets are populated
+    // This handles the case where new images are pasted but not yet fully "asset-ized" or 
+    // where src is Base64 but fileName is missing.
+    data.body.forEach((block: any) => {
+        if (block.type === 'image' && block.attrs?.src?.startsWith('data:')) {
+            // If it has a fileName, ensure it's in assets map
+            let fileName = block.attrs.fileName
+            if (!fileName) {
+                // Generate a temp filename if missing
+                const ext = block.attrs.src.split(';')[0].split('/')[1] || 'png'
+                fileName = `temp_img_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${ext}`
+                block.attrs.fileName = fileName
+            }
+            
+            // Add to assets map if not present
+            if (!assets) assets = {}
+            if (!assets[fileName]) {
+                assets[fileName] = block.attrs.src
+            }
+        }
+    })
+
+    // 0.5 Generate references.bib if references exist
+    if (data.references && data.references.length > 0) {
+        if (!assets) assets = {}
+        
+        let bibContent = ''
+        data.references.forEach((ref: any) => {
+            if (ref.bibtex) {
+                bibContent += ref.bibtex + '\n\n'
+            } else {
+                // Fallback generation if bibtex field missing
+                // Ensure ID matches what is used in citations
+                bibContent += `@misc{${ref.id}, title={${ref.title}}, author={${ref.author}}, year={${ref.year}}}\n\n`
+            }
+        })
+        
+        // Encode as Base64 for asset handling
+        assets['references.bib'] = `data:text/plain;base64,${Buffer.from(bibContent, 'utf8').toString('base64')}`
+    }
+
     // 1. Generate PDF (Reuse render logic)
     const renderer = new TypstRenderer()
     const typstContent = TypstRenderer.convertToTypst(data)

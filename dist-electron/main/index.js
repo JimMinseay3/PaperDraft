@@ -2599,7 +2599,7 @@ var admZip = function(input, options) {
 };
 const AdmZip = /* @__PURE__ */ getDefaultExportFromCjs(admZip);
 class PaperFileHandler {
-  // 加载.paper文件
+  // Load .paper file
   static async loadPaper(filePath) {
     try {
       const zip2 = new AdmZip(filePath);
@@ -2615,7 +2615,10 @@ class PaperFileHandler {
       );
       for (const entry of assetEntries) {
         const assetName = path.basename(entry.entryName);
-        assets[assetName] = zip2.readFile(entry);
+        const buffer = zip2.readFile(entry);
+        if (buffer) {
+          assets[assetName] = buffer;
+        }
       }
       return {
         data: contentData,
@@ -2626,10 +2629,15 @@ class PaperFileHandler {
       throw new Error(`Failed to load paper file: ${error2.message}`);
     }
   }
-  // 保存.paper文件
+  // Save .paper file (Preserves history)
   static async savePaper(filePath, data, assets = {}) {
     try {
-      const zip2 = new AdmZip();
+      let zip2;
+      if (fs$2.existsSync(filePath)) {
+        zip2 = new AdmZip(filePath);
+      } else {
+        zip2 = new AdmZip();
+      }
       zip2.addFile("content.json", Buffer.from(JSON.stringify(data, null, 2)));
       for (const [assetName, assetData] of Object.entries(assets)) {
         if (assetData instanceof Buffer) {
@@ -2642,26 +2650,98 @@ class PaperFileHandler {
       throw new Error(`Failed to save paper file: ${error2.message}`);
     }
   }
-  // 创建新文档
+  // Create Snapshot
+  static async createSnapshot(filePath, data, note, type) {
+    try {
+      if (!fs$2.existsSync(filePath)) {
+        throw new Error("Cannot create snapshot: File does not exist. Save first.");
+      }
+      const zip2 = new AdmZip(filePath);
+      const timestamp = Date.now();
+      const id = `v${timestamp}`;
+      const contentStr = JSON.stringify(data, null, 2);
+      zip2.addFile(`history/${id}_content.json`, Buffer.from(contentStr));
+      let historyIndex = { snapshots: [] };
+      const indexEntry = zip2.getEntry("history/index.json");
+      if (indexEntry) {
+        const indexStr = zip2.readAsText(indexEntry);
+        try {
+          historyIndex = JSON.parse(indexStr);
+        } catch (e) {
+          console.error("Failed to parse history index, creating new one");
+        }
+      }
+      let wordCount = 0;
+      data.body.forEach((b) => {
+        if (typeof b.content === "string") {
+          wordCount += b.content.length;
+        }
+      });
+      const snapshot = {
+        id,
+        timestamp,
+        note,
+        type,
+        wordCount
+      };
+      historyIndex.snapshots.unshift(snapshot);
+      zip2.addFile("history/index.json", Buffer.from(JSON.stringify(historyIndex, null, 2)));
+      zip2.writeZip(filePath);
+      return snapshot;
+    } catch (error2) {
+      throw new Error(`Failed to create snapshot: ${error2.message}`);
+    }
+  }
+  // Get Snapshots List
+  static async getSnapshots(filePath) {
+    try {
+      if (!fs$2.existsSync(filePath)) return [];
+      const zip2 = new AdmZip(filePath);
+      const indexEntry = zip2.getEntry("history/index.json");
+      if (!indexEntry) return [];
+      const indexStr = zip2.readAsText(indexEntry);
+      const index = JSON.parse(indexStr);
+      return index.snapshots || [];
+    } catch (error2) {
+      console.error("Failed to get snapshots:", error2);
+      return [];
+    }
+  }
+  // Load Snapshot Content
+  static async loadSnapshot(filePath, snapshotId) {
+    try {
+      const zip2 = new AdmZip(filePath);
+      const entryName = `history/${snapshotId}_content.json`;
+      const entry = zip2.getEntry(entryName);
+      if (!entry) {
+        throw new Error(`Snapshot content not found: ${entryName}`);
+      }
+      const contentStr = zip2.readAsText(entry);
+      return JSON.parse(contentStr);
+    } catch (error2) {
+      throw new Error(`Failed to load snapshot: ${error2.message}`);
+    }
+  }
+  // Create New Paper
   static createNewPaper(title, author, school) {
     return {
       version: "1.0.0",
       paper_info: {
-        title: title || "未命名论文",
-        author: author || "作者",
-        school: school || "学校"
+        title: title || "Untitled Paper",
+        author: author || "Author",
+        school: school || "School"
       },
       body: [
         {
           id: "b1",
           type: "heading",
           attrs: { level: 1 },
-          content: "第一章 绪论"
+          content: "Introduction"
         },
         {
           id: "b2",
           type: "paragraph",
-          content: "在此输入内容..."
+          content: "Start typing here..."
         }
       ],
       references: []
@@ -2669,9 +2749,71 @@ class PaperFileHandler {
   }
 }
 class TypstRenderer {
-  constructor(typstBinaryPath = "typst") {
+  constructor(typstBinaryPath) {
     __publicField(this, "typstPath");
-    this.typstPath = typstBinaryPath;
+    if (typstBinaryPath) {
+      this.typstPath = typstBinaryPath;
+    } else {
+      const isDev = !electron.app.isPackaged;
+      const platform = process.platform;
+      const exeName = platform === "win32" ? "typst.exe" : "typst";
+      let bundledPath = "";
+      if (isDev) {
+        bundledPath = path.join(process.cwd(), "resources", "bin", exeName);
+      } else {
+        bundledPath = path.join(process.resourcesPath, "bin", exeName);
+      }
+      if (fs$2.existsSync(bundledPath)) {
+        this.typstPath = bundledPath;
+      } else {
+        this.typstPath = "typst";
+      }
+      console.log("Using typst binary at:", this.typstPath);
+    }
+  }
+  // Render inline content (string or Tiptap JSON array)
+  static renderContent(content) {
+    if (typeof content === "string") {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return "";
+    }
+    return content.map((node2) => {
+      if (node2.type === "citation") {
+        return ` @${node2.attrs.id || node2.attrs.label} `;
+      }
+      if (node2.type !== "text") return "";
+      let text = node2.text || "";
+      let wrapperStart = "";
+      let wrapperEnd = "";
+      if (node2.marks) {
+        const textStyleAttrs = [];
+        node2.marks.forEach((mark) => {
+          var _a, _b;
+          if (mark.type === "bold") {
+            text = `*${text}*`;
+          } else if (mark.type === "italic") {
+            text = `_${text}_`;
+          } else if (mark.type === "strike") {
+            wrapperStart = `#strike[` + wrapperStart;
+            wrapperEnd = wrapperEnd + `]`;
+          } else if (mark.type === "textStyle") {
+            if ((_a = mark.attrs) == null ? void 0 : _a.fontSize) {
+              textStyleAttrs.push(`size: ${mark.attrs.fontSize}`);
+            }
+            if ((_b = mark.attrs) == null ? void 0 : _b.fontFamily) {
+              textStyleAttrs.push(`font: "${mark.attrs.fontFamily}"`);
+            }
+          }
+        });
+        if (textStyleAttrs.length > 0) {
+          wrapperStart = `#text(${textStyleAttrs.join(", ")})[` + wrapperStart;
+          wrapperEnd = wrapperEnd + `]`;
+        }
+      }
+      return `${wrapperStart}${text}${wrapperEnd}`;
+    }).join("");
   }
   // 将content.json转换为.typ格式
   static convertToTypst(data) {
@@ -2687,26 +2829,42 @@ class TypstRenderer {
 `;
     data.body.forEach((block) => {
       var _a, _b, _c;
+      const content = TypstRenderer.renderContent(block.content || "");
       switch (block.type) {
         case "heading":
           const level = "=".repeat(((_a = block.attrs) == null ? void 0 : _a.level) || 1);
-          typstContent += `${level} ${block.content || ""}
+          typstContent += `${level} ${content}
 
 `;
           break;
         case "paragraph":
-          typstContent += `${block.content || ""}
+          typstContent += `${content}
 
 `;
           break;
         case "image":
           if ((_b = block.attrs) == null ? void 0 : _b.src) {
-            typstContent += `#figure(
-  image("${block.attrs.src}"),
+            let imagePath = block.attrs.src;
+            if (imagePath.startsWith("data:")) {
+              if (block.attrs.fileName) {
+                imagePath = `assets/${block.attrs.fileName}`;
+              } else {
+                if (block.attrs.fileName) {
+                  imagePath = `assets/${block.attrs.fileName}`;
+                } else {
+                  console.warn("Skipping Base64 image without fileName in Typst generation");
+                  imagePath = "";
+                }
+              }
+            }
+            if (imagePath) {
+              typstContent += `#figure(
+  image("${imagePath}"),
   caption: [${block.attrs.caption || ""}]
 )
 
 `;
+            }
           }
           break;
         case "citation":
@@ -2716,12 +2874,10 @@ class TypstRenderer {
           break;
       }
     });
-    if (data.references.length > 0) {
-      typstContent += "\n= 参考文献\n\n";
-      data.references.forEach((ref, index) => {
-        typstContent += `+ ${ref.author}. ${ref.title}. ${ref.year}.
-`;
-      });
+    if (data.references && data.references.length > 0) {
+      typstContent += `
+
+#bibliography("assets/references.bib", style: "gb-7714-2015-numeric")`;
     }
     return typstContent;
   }
@@ -2827,34 +2983,34 @@ const isRegExp$1 = tagTester("RegExp");
 const isError = tagTester("Error");
 const isSymbol = tagTester("Symbol");
 const isArrayBuffer = tagTester("ArrayBuffer");
-var isFunction = tagTester("Function");
+var isFunction$1 = tagTester("Function");
 var nodelist = root.document && root.document.childNodes;
 if (typeof /./ != "function" && typeof Int8Array != "object" && typeof nodelist != "function") {
-  isFunction = function(obj) {
+  isFunction$1 = function(obj) {
     return typeof obj == "function" || false;
   };
 }
-const isFunction$1 = isFunction;
+const isFunction = isFunction$1;
 const hasObjectTag = tagTester("Object");
 var hasDataViewBug = supportsDataView && (!/\[native code\]/.test(String(DataView)) || hasObjectTag(new DataView(new ArrayBuffer(8)))), isIE11 = typeof Map !== "undefined" && hasObjectTag(/* @__PURE__ */ new Map());
-var isDataView = tagTester("DataView");
+var isDataView$1 = tagTester("DataView");
 function alternateIsDataView(obj) {
-  return obj != null && isFunction$1(obj.getInt8) && isArrayBuffer(obj.buffer);
+  return obj != null && isFunction(obj.getInt8) && isArrayBuffer(obj.buffer);
 }
-const isDataView$1 = hasDataViewBug ? alternateIsDataView : isDataView;
+const isDataView = hasDataViewBug ? alternateIsDataView : isDataView$1;
 const isArray = nativeIsArray || tagTester("Array");
 function has$1(obj, key) {
   return obj != null && hasOwnProperty.call(obj, key);
 }
-var isArguments = tagTester("Arguments");
+var isArguments$1 = tagTester("Arguments");
 (function() {
-  if (!isArguments(arguments)) {
-    isArguments = function(obj) {
+  if (!isArguments$1(arguments)) {
+    isArguments$1 = function(obj) {
       return has$1(obj, "callee");
     };
   }
 })();
-const isArguments$1 = isArguments;
+const isArguments = isArguments$1;
 function isFinite$1(obj) {
   return !isSymbol(obj) && _isFinite(obj) && !isNaN(parseFloat(obj));
 }
@@ -2880,10 +3036,10 @@ function shallowProperty(key) {
 const getByteLength = shallowProperty("byteLength");
 const isBufferLike = createSizePropertyCheck(getByteLength);
 var typedArrayPattern = /\[object ((I|Ui)nt(8|16|32)|Float(32|64)|Uint8Clamped|Big(I|Ui)nt64)Array\]/;
-function isTypedArray(obj) {
-  return nativeIsView ? nativeIsView(obj) && !isDataView$1(obj) : isBufferLike(obj) && typedArrayPattern.test(toString$2.call(obj));
+function isTypedArray$1(obj) {
+  return nativeIsView ? nativeIsView(obj) && !isDataView(obj) : isBufferLike(obj) && typedArrayPattern.test(toString$2.call(obj));
 }
-const isTypedArray$1 = supportsArrayBuffer ? isTypedArray : constant(false);
+const isTypedArray = supportsArrayBuffer ? isTypedArray$1 : constant(false);
 const getLength = shallowProperty("length");
 function emulatedSet(keys2) {
   var hash = {};
@@ -2902,7 +3058,7 @@ function collectNonEnumProps(obj, keys2) {
   keys2 = emulatedSet(keys2);
   var nonEnumIdx = nonEnumerableProps.length;
   var constructor = obj.constructor;
-  var proto = isFunction$1(constructor) && constructor.prototype || ObjProto;
+  var proto = isFunction(constructor) && constructor.prototype || ObjProto;
   var prop = "constructor";
   if (has$1(obj, prop) && !keys2.contains(prop)) keys2.push(prop);
   while (nonEnumIdx--) {
@@ -2923,7 +3079,7 @@ function keys(obj) {
 function isEmpty(obj) {
   if (obj == null) return true;
   var length = getLength(obj);
-  if (typeof length == "number" && (isArray(obj) || isString(obj) || isArguments$1(obj))) return length === 0;
+  if (typeof length == "number" && (isArray(obj) || isString(obj) || isArguments(obj))) return length === 0;
   return getLength(keys(obj)) === 0;
 }
 function isMatch(object2, attrs) {
@@ -2970,8 +3126,8 @@ function deepEq(a, b, aStack, bStack) {
   if (b instanceof _$i) b = b._wrapped;
   var className = toString$2.call(a);
   if (className !== toString$2.call(b)) return false;
-  if (hasDataViewBug && className == "[object Object]" && isDataView$1(a)) {
-    if (!isDataView$1(b)) return false;
+  if (hasDataViewBug && className == "[object Object]" && isDataView(a)) {
+    if (!isDataView(b)) return false;
     className = tagDataView;
   }
   switch (className) {
@@ -2991,7 +3147,7 @@ function deepEq(a, b, aStack, bStack) {
       return deepEq(toBufferView(a), toBufferView(b), aStack, bStack);
   }
   var areArrays = className === "[object Array]";
-  if (!areArrays && isTypedArray$1(a)) {
+  if (!areArrays && isTypedArray(a)) {
     var byteLength2 = getByteLength(a);
     if (byteLength2 !== getByteLength(b)) return false;
     if (a.buffer === b.buffer && a.byteOffset === b.byteOffset) return true;
@@ -3000,7 +3156,7 @@ function deepEq(a, b, aStack, bStack) {
   if (!areArrays) {
     if (typeof a != "object" || typeof b != "object") return false;
     var aCtor = a.constructor, bCtor = b.constructor;
-    if (aCtor !== bCtor && !(isFunction$1(aCtor) && aCtor instanceof aCtor && isFunction$1(bCtor) && bCtor instanceof bCtor) && ("constructor" in a && "constructor" in b)) {
+    if (aCtor !== bCtor && !(isFunction(aCtor) && aCtor instanceof aCtor && isFunction(bCtor) && bCtor instanceof bCtor) && ("constructor" in a && "constructor" in b)) {
       return false;
     }
   }
@@ -3048,9 +3204,9 @@ function ie11fingerprint(methods2) {
     var keys2 = allKeys(obj);
     if (getLength(keys2)) return false;
     for (var i = 0; i < length; i++) {
-      if (!isFunction$1(obj[methods2[i]])) return false;
+      if (!isFunction(obj[methods2[i]])) return false;
     }
-    return methods2 !== weakMapMethods || !isFunction$1(obj[forEachName]);
+    return methods2 !== weakMapMethods || !isFunction(obj[forEachName]);
   };
 }
 var forEachName = "forEach", hasName = "has", commonInit = ["clear", "delete"], mapTail = ["get", hasName, "set"];
@@ -3088,7 +3244,7 @@ function invert(obj) {
 function functions(obj) {
   var names = [];
   for (var key in obj) {
-    if (isFunction$1(obj[key])) names.push(key);
+    if (isFunction(obj[key])) names.push(key);
   }
   return names.sort();
 }
@@ -3202,7 +3358,7 @@ function optimizeCb(func, context2, argCount) {
 }
 function baseIteratee(value, context2, argCount) {
   if (value == null) return identity$2;
-  if (isFunction$1(value)) return optimizeCb(value, context2, argCount);
+  if (isFunction(value)) return optimizeCb(value, context2, argCount);
   if (isObject(value) && !isArray(value)) return matcher(value);
   return property(value);
 }
@@ -3339,7 +3495,7 @@ function result(obj, path2, fallback) {
   path2 = toPath(path2);
   var length = path2.length;
   if (!length) {
-    return isFunction$1(fallback) ? fallback.call(obj) : fallback;
+    return isFunction(fallback) ? fallback.call(obj) : fallback;
   }
   for (var i = 0; i < length; i++) {
     var prop = obj == null ? void 0 : obj[path2[i]];
@@ -3347,7 +3503,7 @@ function result(obj, path2, fallback) {
       prop = fallback;
       i = length;
     }
-    obj = isFunction$1(prop) ? prop.call(obj) : prop;
+    obj = isFunction(prop) ? prop.call(obj) : prop;
   }
   return obj;
 }
@@ -3383,7 +3539,7 @@ var partial = restArguments(function(func, boundArgs) {
 });
 partial.placeholder = _$i;
 const bind$1 = restArguments(function(func, context2, args) {
-  if (!isFunction$1(func)) throw new TypeError("Bind must be called on a function");
+  if (!isFunction(func)) throw new TypeError("Bind must be called on a function");
   var bound = restArguments(function(callArgs) {
     return executeBound(func, bound, context2, this, args.concat(callArgs));
   });
@@ -3400,7 +3556,7 @@ function flatten$1(input, depth, strict, output) {
   var idx = output.length;
   for (var i = 0, length = getLength(input); i < length; i++) {
     var value = input[i];
-    if (isArrayLike(value) && (isArray(value) || isArguments$1(value))) {
+    if (isArrayLike(value) && (isArray(value) || isArguments(value))) {
       if (depth > 1) {
         flatten$1(value, depth - 1, strict, output);
         idx = output.length;
@@ -3685,7 +3841,7 @@ function contains(obj, item, fromIndex, guard) {
 }
 const invoke = restArguments(function(obj, path2, args) {
   var contextPath, func;
-  if (isFunction$1(path2)) {
+  if (isFunction(path2)) {
     func = path2;
   } else {
     path2 = toPath(path2);
@@ -3838,7 +3994,7 @@ function keyInObj(value, key, obj) {
 const pick = restArguments(function(obj, keys2) {
   var result2 = {}, iteratee2 = keys2[0];
   if (obj == null) return result2;
-  if (isFunction$1(iteratee2)) {
+  if (isFunction(iteratee2)) {
     if (keys2.length > 1) iteratee2 = optimizeCb(iteratee2, keys2[1]);
     keys2 = allKeys(obj);
   } else {
@@ -3855,7 +4011,7 @@ const pick = restArguments(function(obj, keys2) {
 });
 const omit = restArguments(function(obj, keys2) {
   var iteratee2 = keys2[0], context2;
-  if (isFunction$1(iteratee2)) {
+  if (isFunction(iteratee2)) {
     iteratee2 = negate(iteratee2);
     if (keys2.length > 1) context2 = keys2[1];
   } else {
@@ -4078,18 +4234,18 @@ const allExports = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   intersection,
   invert,
   invoke,
-  isArguments: isArguments$1,
+  isArguments,
   isArray,
   isArrayBuffer,
   isBoolean,
-  isDataView: isDataView$1,
+  isDataView,
   isDate,
   isElement,
   isEmpty,
   isEqual,
   isError,
   isFinite: isFinite$1,
-  isFunction: isFunction$1,
+  isFunction,
   isMap,
   isMatch,
   isNaN: isNaN$1,
@@ -4100,7 +4256,7 @@ const allExports = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePr
   isSet,
   isString,
   isSymbol,
-  isTypedArray: isTypedArray$1,
+  isTypedArray,
   isUndefined,
   isWeakMap,
   isWeakSet,
@@ -4229,18 +4385,18 @@ const indexAll = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
   intersection,
   invert,
   invoke,
-  isArguments: isArguments$1,
+  isArguments,
   isArray,
   isArrayBuffer,
   isBoolean,
-  isDataView: isDataView$1,
+  isDataView,
   isDate,
   isElement,
   isEmpty,
   isEqual,
   isError,
   isFinite: isFinite$1,
-  isFunction: isFunction$1,
+  isFunction,
   isMap,
   isMatch,
   isNaN: isNaN$1,
@@ -4251,7 +4407,7 @@ const indexAll = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
   isSet,
   isString,
   isSymbol,
-  isTypedArray: isTypedArray$1,
+  isTypedArray,
   isUndefined,
   isWeakMap,
   isWeakSet,
@@ -9962,7 +10118,7 @@ function requireUtil() {
     typeof arg === "undefined";
   }
   util.isPrimitive = isPrimitive;
-  util.isBuffer = Buffer.isBuffer;
+  util.isBuffer = require$$0$4.Buffer.isBuffer;
   function objectToString(o) {
     return Object.prototype.toString.call(o);
   }
@@ -33006,6 +33162,18 @@ electron.ipcMain.handle("save-paper", async (_2, { filePath, data, assets }) => 
   }
   return await PaperFileHandler.savePaper(targetPath, data, assetBuffers);
 });
+electron.ipcMain.handle("get-snapshots", async (_2, { filePath }) => {
+  if (!filePath) return [];
+  return await PaperFileHandler.getSnapshots(filePath);
+});
+electron.ipcMain.handle("create-snapshot", async (_2, { filePath, data, note, type }) => {
+  if (!filePath) throw new Error("File not saved yet");
+  return await PaperFileHandler.createSnapshot(filePath, data, note, type);
+});
+electron.ipcMain.handle("load-snapshot", async (_2, { filePath, snapshotId }) => {
+  if (!filePath) throw new Error("File path required");
+  return await PaperFileHandler.loadSnapshot(filePath, snapshotId);
+});
 electron.ipcMain.handle("render-preview", async (_2, { data, assets }) => {
   try {
     const renderer = new TypstRenderer();
@@ -33032,6 +33200,35 @@ electron.ipcMain.handle("render-preview", async (_2, { data, assets }) => {
 let previewWin = null;
 electron.ipcMain.handle("open-preview-window", async (_2, { data, assets }) => {
   try {
+    data.body.forEach((block) => {
+      var _a, _b;
+      if (block.type === "image" && ((_b = (_a = block.attrs) == null ? void 0 : _a.src) == null ? void 0 : _b.startsWith("data:"))) {
+        let fileName = block.attrs.fileName;
+        if (!fileName) {
+          const ext = block.attrs.src.split(";")[0].split("/")[1] || "png";
+          fileName = `temp_img_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${ext}`;
+          block.attrs.fileName = fileName;
+        }
+        if (!assets) assets = {};
+        if (!assets[fileName]) {
+          assets[fileName] = block.attrs.src;
+        }
+      }
+    });
+    if (data.references && data.references.length > 0) {
+      if (!assets) assets = {};
+      let bibContent = "";
+      data.references.forEach((ref) => {
+        if (ref.bibtex) {
+          bibContent += ref.bibtex + "\n\n";
+        } else {
+          bibContent += `@misc{${ref.id}, title={${ref.title}}, author={${ref.author}}, year={${ref.year}}}
+
+`;
+        }
+      });
+      assets["references.bib"] = `data:text/plain;base64,${Buffer.from(bibContent, "utf8").toString("base64")}`;
+    }
     const renderer = new TypstRenderer();
     const typstContent = TypstRenderer.convertToTypst(data);
     const tempDir = electron.app.getPath("temp");

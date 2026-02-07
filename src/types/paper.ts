@@ -27,7 +27,25 @@ export interface Block {
 
 export interface Reference {
   id: string;
+  type?: string; // article, book, misc, etc.
   title: string;
   author: string;
   year: number;
+  journal?: string;
+  volume?: string;
+  pages?: string;
+  publisher?: string;
+  bibtex?: string; // Store raw bibtex if imported
+}
+
+export interface Snapshot {
+  id: string;
+  timestamp: number;
+  note: string;
+  type: 'manual' | 'auto';
+  wordCount?: number;
+}
+
+export interface HistoryIndex {
+  snapshots: Snapshot[];
 }
