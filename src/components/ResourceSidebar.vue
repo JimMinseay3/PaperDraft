@@ -11,6 +11,10 @@ const props = defineProps<{
   assets: Record<string, string>
 }>()
 
+const emit = defineEmits<{
+  (e: 'jump', id: string): void
+}>()
+
 const isImagesOpen = ref(true)
 const isTablesOpen = ref(true)
 
@@ -35,16 +39,18 @@ const resolveImageSrc = (block: Block) => {
 }
 
 const extractedAssets = computed(() => {
-  const images: Block[] = []
-  const tables: Block[] = []
+  const images: (Block & { line: number })[] = []
+  const tables: (Block & { line: number })[] = []
+  let lineCounter = 0
   
   const traverse = (nodes: Block[]) => {
     for (const node of nodes) {
+      lineCounter++
       const type = node.type as string
       if (type === 'image') {
-        images.push(node)
+        images.push({ ...node, line: lineCounter })
       } else if (type === 'table') {
-        tables.push(node)
+        tables.push({ ...node, line: lineCounter })
       }
       
       if (Array.isArray(node.content)) {
@@ -84,19 +90,37 @@ const extractedAssets = computed(() => {
           <div v-if="extractedAssets.images.length === 0" class="text-xs text-gray-400 italic px-2 py-1">
             {{ t('resources.noImages') }}
           </div>
-          <div v-else class="grid grid-cols-2 gap-2">
+          <div v-else class="space-y-1">
             <div 
               v-for="img in extractedAssets.images" 
               :key="img.id"
-              class="group relative aspect-square bg-gray-100 rounded border border-gray-200 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+              class="flex items-center p-2 bg-white hover:bg-gray-100 rounded border border-gray-100 cursor-pointer group transition-colors"
+              @click="emit('jump', img.id)"
             >
-              <img 
-                :src="resolveImageSrc(img)" 
-                class="w-full h-full object-cover" 
-                :alt="img.attrs?.caption || 'Image'"
-              />
-              <div class="absolute inset-x-0 bottom-0 bg-black/60 p-1 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                <p class="text-[10px] text-white truncate text-center">{{ img.attrs?.caption || img.attrs?.fileName || t('resources.untitledImage') }}</p>
+              <!-- Thumbnail -->
+              <div class="w-10 h-10 flex-none bg-gray-200 rounded overflow-hidden border border-gray-200 mr-3">
+                 <img 
+                  :src="resolveImageSrc(img)" 
+                  class="w-full h-full object-cover" 
+                  :alt="img.attrs?.caption || 'Image'"
+                />
+              </div>
+              
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-medium text-gray-800 truncate" :title="img.attrs?.caption || img.attrs?.fileName || t('resources.untitledImage')">
+                  {{ img.attrs?.caption || img.attrs?.fileName || t('resources.untitledImage') }}
+                </p>
+                <p class="text-[10px] text-gray-500 truncate" :title="img.attrs?.fileName || ''">
+                  {{ img.attrs?.fileName || 'No filename' }}
+                </p>
+              </div>
+
+              <!-- Line Number -->
+              <div class="ml-2 flex-none">
+                <span class="text-[10px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 group-hover:bg-white group-hover:text-blue-500 transition-colors">
+                  Ln {{ img.line }}
+                </span>
               </div>
             </div>
           </div>
@@ -124,10 +148,12 @@ const extractedAssets = computed(() => {
             <li 
               v-for="(tbl, index) in extractedAssets.tables" 
               :key="tbl.id"
-              class="flex items-center px-2 py-1.5 hover:bg-gray-100 rounded cursor-pointer text-xs text-gray-700"
+              class="flex items-center px-2 py-1.5 hover:bg-gray-100 rounded cursor-pointer text-xs text-gray-700 group"
+              @click="emit('jump', tbl.id)"
             >
               <TableIcon class="w-3.5 h-3.5 text-blue-500 mr-2" />
-              <span class="truncate">{{ t('resources.table') }} {{ index + 1 }}</span>
+              <span class="truncate flex-1">{{ t('resources.table') }} {{ index + 1 }}</span>
+              <span class="ml-2 text-[10px] font-mono text-gray-400 group-hover:text-blue-500">Ln {{ tbl.line }}</span>
             </li>
           </ul>
         </div>

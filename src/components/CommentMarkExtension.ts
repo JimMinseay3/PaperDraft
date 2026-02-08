@@ -34,12 +34,14 @@ export default Node.create({
         dom.dataset.id = node.attrs.id
         dom.textContent = '💬'
         dom.title = 'Click to view comment'
+        
+        // Styles for right-side positioning
+        dom.style.position = 'absolute'
+        dom.style.right = '10px' // Inside the 50px padding of ProseMirror
         dom.style.cursor = 'pointer'
-        dom.style.fontSize = '0.8em'
-        dom.style.verticalAlign = 'super'
-        dom.style.marginLeft = '2px'
-        dom.style.marginRight = '2px'
+        dom.style.fontSize = '1em'
         dom.style.color = '#3b82f6' // blue-500
+        dom.style.zIndex = '10' // Ensure it's above text
         
         // Add click listener
         dom.addEventListener('click', (e) => {

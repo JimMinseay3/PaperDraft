@@ -4,6 +4,10 @@ import { ref, watch } from 'vue'
 
 const { t, locale } = useI18n()
 
+// Props are no longer needed for globalStyles as they moved to TypographySidebar
+// But keeping it if we need other global settings in the future, or removing if strictly cleaning up.
+// For now, I'll remove the unused prop to be clean.
+
 const currentLanguage = ref(locale.value)
 
 watch(currentLanguage, (newLang) => {
@@ -12,7 +16,7 @@ watch(currentLanguage, (newLang) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-white border-r border-gray-200">
+  <div class="h-full flex flex-col bg-white border-r border-gray-200 overflow-y-auto">
     <div class="p-4 border-b border-gray-200">
       <h2 class="text-lg font-semibold text-gray-800">{{ t('settings.title') }}</h2>
     </div>
@@ -28,21 +32,6 @@ watch(currentLanguage, (newLang) => {
           <option value="zh">中文 (Chinese)</option>
           <option value="en">English</option>
         </select>
-      </div>
-
-      <!-- Theme Settings (Placeholder) -->
-      <div class="space-y-2">
-        <label class="block text-sm font-medium text-gray-700">{{ t('settings.theme') }}</label>
-        <div class="flex items-center space-x-4">
-          <div class="flex items-center">
-            <input id="theme-light" name="theme" type="radio" checked class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
-            <label for="theme-light" class="ml-2 block text-sm text-gray-900">{{ t('settings.themeLight') }}</label>
-          </div>
-          <div class="flex items-center">
-            <input id="theme-dark" name="theme" type="radio" disabled class="focus:ring-blue-500 h-4 w-4 text-gray-300 border-gray-300">
-            <label for="theme-dark" class="ml-2 block text-sm text-gray-400">{{ t('settings.themeDark') }}</label>
-          </div>
-        </div>
       </div>
 
       <!-- About -->

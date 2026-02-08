@@ -13,6 +13,7 @@ const emit = defineEmits<{
   (e: 'open'): void
   (e: 'save'): void
   (e: 'import-word'): void
+  (e: 'export-docx'): void
   (e: 'toggle-assistant'): void
 }>()
 
@@ -41,10 +42,11 @@ const closeMenu = () => {
   activeMenu.value = null
 }
 
-const handleAction = (action: 'open' | 'save' | 'import-word') => {
+const handleAction = (action: 'open' | 'save' | 'import-word' | 'export-docx') => {
   if (action === 'open') emit('open')
   else if (action === 'save') emit('save')
   else if (action === 'import-word') emit('import-word')
+  else if (action === 'export-docx') emit('export-docx')
   closeMenu()
 }
 
@@ -105,6 +107,12 @@ onUnmounted(() => {
               class="px-4 py-1.5 hover:bg-blue-600 cursor-pointer flex justify-between items-center group"
             >
               <span>{{ t('menu.importWord') }}</span>
+            </div>
+            <div 
+              @click="handleAction('export-docx')" 
+              class="px-4 py-1.5 hover:bg-blue-600 cursor-pointer flex justify-between items-center group"
+            >
+              <span>{{ t('menu.exportDocx') }}</span>
             </div>
             <div 
               @click="handleAction('save')" 

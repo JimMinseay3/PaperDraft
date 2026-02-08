@@ -13,7 +13,8 @@ import {
   ListOrdered, 
   CheckSquare, 
   Code,
-  Image
+  Image,
+  Sigma
 } from 'lucide-vue-next'
 import { markRaw } from 'vue'
 
@@ -95,6 +96,13 @@ export default Extension.create({
           icon: markRaw(Code),
           command: ({ editor, range }: any) => {
             editor.chain().focus().deleteRange(range).toggleCodeBlock().run()
+          },
+        },
+        {
+          title: 'Math Formula',
+          icon: markRaw(Sigma),
+          command: ({ editor, range }: any) => {
+            editor.chain().focus().deleteRange(range).insertContent({ type: 'math' }).run()
           },
         },
         {

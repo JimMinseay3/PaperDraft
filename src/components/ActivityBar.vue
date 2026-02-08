@@ -6,7 +6,8 @@ import {
   Clock, 
   Package, 
   Settings,
-  BookOpen
+  BookOpen,
+  Type
 } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -27,6 +28,7 @@ const menuItems = computed(() => [
   { id: 'file', icon: Files, title: t('activityBar.file') },
   { id: 'search', icon: Search, title: t('activityBar.search') },
   { id: 'citations', icon: BookOpen, title: t('activityBar.citations') },
+  { id: 'typography', icon: Type, title: t('activityBar.typography') },
   { id: 'resources', icon: Package, title: t('activityBar.resources') },
   { id: 'version', icon: Clock, title: t('activityBar.version') },
   { id: 'preview', icon: Eye, title: t('activityBar.preview') },

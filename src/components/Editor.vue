@@ -13,10 +13,12 @@ import TextAlign from '@tiptap/extension-text-align'
 import FontFamily from '@tiptap/extension-font-family'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { FontSize } from './FontSizeExtension'
+import { Color } from './ColorExtension'
 import CommentMark from './CommentMarkExtension'
 import CitationNode, { CitationSuggestion } from './CitationExtension'
 import SlashCommand from './SlashCommandExtension'
 import ImageExtension from './ImageExtension'
+import MathExtension from './MathExtension'
 import DragHandle from './DragHandle.vue'
 import { watch, onBeforeUnmount, ref } from 'vue'
 import { 
@@ -71,6 +73,7 @@ const mapTipTapToBlocks = (json: any): Block[] => {
     else if (node.type === 'orderedList') { type = 'list'; attrs.listType = 'ordered' }
     else if (node.type === 'taskList') { type = 'list'; attrs.listType = 'task' }
     else if (node.type === 'codeBlock') type = 'code'
+    else if (node.type === 'math') type = 'math'
 
     // Handle Image Assets
     if (type === 'image') {
@@ -160,7 +163,7 @@ const GlobalId = Extension.create({
   addGlobalAttributes() {
     return [
       {
-        types: ['heading', 'paragraph', 'bulletList', 'orderedList', 'taskList', 'image', 'codeBlock'],
+        types: ['heading', 'paragraph', 'bulletList', 'orderedList', 'taskList', 'image', 'codeBlock', 'math'],
         attributes: {
           id: {
             default: null,
@@ -288,6 +291,7 @@ const editor = useEditor({
     ImageExtension.configure({
         allowBase64: true,
     }),
+    MathExtension,
     TaskList,
     TaskItem.configure({
       nested: true,
@@ -301,6 +305,7 @@ const editor = useEditor({
       },
     }),
     TextStyle,
+    Color,
     FontFamily,
     FontSize,
     Highlight,
@@ -415,7 +420,14 @@ const isNavigating = ref(false)
 // Watch for external changes
 watch(() => props.modelValue, (newValue) => {
   if (editor.value && !editor.value.isFocused && !isNavigating.value) {
-     editor.value.commands.setContent(mapBlocksToTipTap(newValue))
+    // Check if content actually changed to avoid infinite loops
+    // logic: props update -> setContent -> onUpdate -> emit -> props update
+    const currentBlocks = mapTipTapToBlocks(editor.value.getJSON())
+    if (JSON.stringify(currentBlocks) === JSON.stringify(newValue)) {
+      return
+    }
+    
+    editor.value.commands.setContent(mapBlocksToTipTap(newValue))
   }
 }, { deep: true })
 
@@ -724,6 +736,7 @@ defineExpose({
           <option value="SimHei">黑体</option>
           <option value="FangSong">仿宋</option>
           <option value="KaiTi">楷体</option>
+          <option value="DengXian">等线</option>
           <option value="Arial">Arial</option>
           <option value="Times New Roman">Times</option>
         </select>

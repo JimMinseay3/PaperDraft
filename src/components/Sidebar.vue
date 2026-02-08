@@ -6,10 +6,15 @@ import { ChevronDown, ChevronRight, PlusSquare, MinusSquare } from 'lucide-vue-n
 
 const { t } = useI18n()
 
-const props = defineProps<{
-  blocks: Block[]
-  info: { title: string; author: string; school: string }
-}>()
+const props = withDefaults(defineProps<{
+  blocks?: Block[]
+  info?: { title: string; author: string; school: string }
+  isEmpty?: boolean
+}>(), {
+  blocks: () => [],
+  info: () => ({ title: '', author: '', school: '' }),
+  isEmpty: false
+})
 
 const emit = defineEmits<{
   (e: 'jump', blockId: string): void
@@ -18,7 +23,6 @@ const emit = defineEmits<{
 }>()
 
 const isOutlineOpen = ref(true)
-const isMetadataOpen = ref(true)
 const collapsedIds = ref(new Set<string>())
 const dragOverId = ref<string | null>(null)
 const dropPosition = ref<'top' | 'bottom' | null>(null)
@@ -167,69 +171,44 @@ const updateInfo = () => {
 <template>
   <div class="sidebar h-full bg-gray-50 flex flex-col">
     
-    <!-- Metadata Section -->
-    <div class="border-b border-gray-200 bg-white">
-      <div 
-        class="flex items-center px-3 py-2 cursor-pointer hover:bg-gray-100 select-none"
-        @click="isMetadataOpen = !isMetadataOpen"
-      >
-        <component :is="isMetadataOpen ? ChevronDown : ChevronRight" class="w-4 h-4 text-gray-500 mr-2" />
-        <span class="text-xs font-bold text-gray-700 uppercase">{{ t('sidebar.metadata') }}</span>
+    <!-- Empty State -->
+    <div v-if="isEmpty" class="h-full flex flex-col">
+      <div class="border-b border-gray-200">
+          <div class="flex items-center justify-between px-3 py-2 select-none">
+            <div class="flex items-center">
+              <span class="text-xs font-bold text-gray-700 uppercase">{{ t('sidebar.outline') }}</span>
+            </div>
+          </div>
       </div>
-
-      <div v-show="isMetadataOpen" class="p-3 space-y-2">
-        <div>
-          <label class="block text-xs text-gray-400">{{ t('sidebar.title') }}</label>
-          <input 
-            v-model="info.title" 
-            @input="updateInfo"
-            class="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            :placeholder="t('sidebar.titlePlaceholder')"
-          />
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400">{{ t('sidebar.author') }}</label>
-          <input 
-            v-model="info.author" 
-            @input="updateInfo"
-            class="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            :placeholder="t('sidebar.authorPlaceholder')"
-          />
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400">{{ t('sidebar.school') }}</label>
-          <input 
-            v-model="info.school" 
-            @input="updateInfo"
-            class="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            :placeholder="t('sidebar.schoolPlaceholder')"
-          />
-        </div>
+      <div class="flex-1 flex items-center justify-center text-gray-400 text-sm p-4 text-center">
+          暂无打开的文件
       </div>
     </div>
 
     <!-- Outline Section -->
-    <div class="border-b border-gray-200">
-      <div 
-        class="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-100 select-none"
-        @click="isOutlineOpen = !isOutlineOpen"
-      >
-        <div class="flex items-center">
-          <component :is="isOutlineOpen ? ChevronDown : ChevronRight" class="w-4 h-4 text-gray-500 mr-2" />
-          <span class="text-xs font-bold text-gray-700 uppercase">{{ t('sidebar.outline') }}</span>
-        </div>
-        <!-- Expand/Collapse All Buttons -->
-        <div v-if="isOutlineOpen" class="flex items-center space-x-1">
-          <button @click.stop="expandAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" :title="t('sidebar.expandAll')">
-            <PlusSquare class="w-3.5 h-3.5" />
-          </button>
-          <button @click.stop="collapseAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" :title="t('sidebar.collapseAll')">
-            <MinusSquare class="w-3.5 h-3.5" />
-          </button>
+    <div v-else class="flex flex-col h-full">
+      <div class="border-b border-gray-200">
+        <div 
+          class="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-100 select-none"
+          @click="isOutlineOpen = !isOutlineOpen"
+        >
+          <div class="flex items-center">
+            <component :is="isOutlineOpen ? ChevronDown : ChevronRight" class="w-4 h-4 text-gray-500 mr-2" />
+            <span class="text-xs font-bold text-gray-700 uppercase">{{ t('sidebar.outline') }}</span>
+          </div>
+          <!-- Expand/Collapse All Buttons -->
+          <div v-if="isOutlineOpen" class="flex items-center space-x-1">
+            <button @click.stop="expandAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" :title="t('sidebar.expandAll')">
+              <PlusSquare class="w-3.5 h-3.5" />
+            </button>
+            <button @click.stop="collapseAll" class="p-0.5 hover:bg-gray-200 rounded text-gray-500" :title="t('sidebar.collapseAll')">
+              <MinusSquare class="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
       
-      <div v-show="isOutlineOpen" class="flex-1 overflow-y-auto p-2 max-h-[50vh]">
+      <div v-show="isOutlineOpen" class="flex-1 overflow-y-auto p-2 max-h-[calc(100vh-100px)]">
         <div v-if="visibleItems.length === 0" class="text-gray-400 text-sm italic p-2">
           {{ t('sidebar.noHeadings') }}
         </div>

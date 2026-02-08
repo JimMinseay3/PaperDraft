@@ -96,12 +96,7 @@ export class TypstRenderer {
   static convertToTypst(data: PaperData): string {
     let typstContent = `#set page("a4")
 #set text(size: 12pt, font: ("SimSun", "Times New Roman"))
-#set heading(numbering: "1.")
-
-= ${data.paper_info.title}
-
-*作者*: ${data.paper_info.author}
-*学校*: ${data.paper_info.school}
+#set heading(numbering: none)
 
 `;
 
@@ -212,6 +207,12 @@ export class TypstRenderer {
         case 'citation':
           if (block.attrs?.refId) {
             typstContent += `@${block.attrs.refId} `;
+          }
+          break;
+
+        case 'math':
+          if (block.attrs?.src) {
+             typstContent += `$ ${block.attrs.src} $\n\n`;
           }
           break;
       }

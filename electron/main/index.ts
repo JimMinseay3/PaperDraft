@@ -1,12 +1,14 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, protocol, net } from 'electron'
 import { release } from 'os'
 import { join } from 'path'
+import { pathToFileURL, fileURLToPath } from 'url'
 import { PaperFileHandler } from './fileHandler'
 import { TypstRenderer } from './typstRenderer'
 import fs from 'fs'
 import mammoth from 'mammoth'
 import AdmZip from 'adm-zip'
-import { XMLParser } from 'fast-xml-parser'
+import { XMLParser, XMLBuilder } from 'fast-xml-parser'
+import { generateDocx } from './docxGenerator'
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -31,6 +33,20 @@ const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST, 'index.html')
 
+// Register custom protocol as privileged
+protocol.registerSchemesAsPrivileged([
+  { 
+    scheme: 'paper-preview', 
+    privileges: { 
+      standard: true, 
+      secure: true, 
+      supportFetchAPI: true, 
+      corsEnabled: true,
+      bypassCSP: true
+    } 
+  }
+])
+
 async function createWindow() {
   win = new BrowserWindow({
     title: 'PaperDraft',
@@ -44,6 +60,7 @@ async function createWindow() {
       // Consider using contextBridge.exposeInMainWorld
       nodeIntegration: true,
       contextIsolation: false,
+      plugins: true // Enable PDF viewer
     },
   })
 
@@ -79,7 +96,37 @@ async function createWindow() {
   win.on('unmaximize', () => win?.webContents.send('window-maximized', false))
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  // Register custom protocol for secure preview
+  protocol.handle('paper-preview', async (request) => {
+    try {
+        const urlObj = new URL(request.url);
+        const filePath = urlObj.searchParams.get('path');
+        
+        console.log('Preview request:', request.url, '->', filePath);
+
+        if (!filePath) {
+            return new Response('Path not provided', { status: 400 });
+        }
+
+        // Security check: only allow reading from temp directory or specific allowed paths
+        // For now, we just check extension and existence
+        if (filePath.toLowerCase().endsWith('.pdf')) {
+            const data = await fs.promises.readFile(filePath);
+            return new Response(data, {
+                headers: { 'Content-Type': 'application/pdf' }
+            });
+        }
+        
+        return new Response('Invalid file type', { status: 403 });
+    } catch (e: any) {
+        console.error('Failed to load preview resource:', request.url, e)
+        return new Response('Not Found: ' + e.message, { status: 404 })
+    }
+  })
+
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   win = null
@@ -148,10 +195,10 @@ ipcMain.handle('load-paper', async () => {
 })
 
 // Helper function to extract comments from docx
-const extractComments = async (filePath: string) => {
-  console.log('Extracting comments from:', filePath)
+const extractComments = async (fileData: Buffer) => {
+  console.log('Extracting comments from buffer')
   try {
-    const zip = new AdmZip(filePath)
+    const zip = new AdmZip(fileData)
     const commentsEntry = zip.getEntry('word/comments.xml')
     if (!commentsEntry) {
       console.log('No comments.xml found in docx')
@@ -202,27 +249,133 @@ const extractComments = async (filePath: string) => {
   }
 }
 
-// Helper to inject comment markers into document.xml before conversion
-const injectCommentMarkers = (buffer: Buffer): Buffer => {
+// Helper to preprocess Word XML for custom markers (Comments, Alignment, Color)
+const preprocessDocx = (buffer: Buffer): Buffer => {
   try {
     const zip = new AdmZip(buffer)
     const docEntry = zip.getEntry('word/document.xml')
     if (!docEntry) return buffer
 
-    let xml = docEntry.getData().toString('utf8')
-    
-    // Replace <w:commentReference w:id="X"/> with <w:t>__CR_X__</w:t>
-    // We use a regex that handles potential attributes
-    // Note: This assumes w:commentReference is inside a w:r, or at least where w:t is valid.
-    // If it's a self-closing tag:
-    xml = xml.replace(/<w:commentReference\s+[^>]*w:id=["'](\d+)["'][^>]*\/>/g, '<w:t>__CR_$1__</w:t>')
-    // If it's not self-closing (rare):
-    xml = xml.replace(/<w:commentReference\s+[^>]*w:id=["'](\d+)["'][^>]*>.*?<\/w:commentReference>/g, '<w:t>__CR_$1__</w:t>')
+    const xml = docEntry.getData().toString('utf8')
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      preserveOrder: true
+    })
+    const builder = new XMLBuilder({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      preserveOrder: true,
+      format: false,
+      suppressEmptyNode: true
+    })
 
-    zip.updateFile('word/document.xml', Buffer.from(xml, 'utf8'))
+    const docObj = parser.parse(xml)
+
+    const processNodeList = (nodes: any[]) => {
+      if (!Array.isArray(nodes)) return
+      nodes.forEach(node => {
+        const key = Object.keys(node)[0]
+        if (key === ':@') return // Skip attributes group
+
+        const value = node[key]
+        
+        if (key === 'w:p') {
+          handleParagraph(value)
+        } else if (Array.isArray(value)) {
+          processNodeList(value)
+        }
+      })
+    }
+
+    const handleParagraph = (children: any[]) => {
+      let align = ''
+
+      // 1. Find Alignment
+      const pPrNode = children.find(c => c['w:pPr'])
+      if (pPrNode) {
+        const pPrChildren = pPrNode['w:pPr']
+        const jcNode = pPrChildren.find((c: any) => c['w:jc'])
+        if (jcNode && jcNode[':@']) {
+          align = jcNode[':@']['@_w:val']
+        }
+      }
+
+      // 2. Process Runs and Comments
+      let firstRunFound = false
+      children.forEach((child, index) => {
+        if (child['w:r']) {
+          handleRun(child['w:r'], align && !firstRunFound ? align : null)
+          if (align) firstRunFound = true
+        }
+        
+        // Handle Comments: Replace <w:commentReference> with <w:r><w:t>__CR_ID__</w:t></w:r>
+        if (child['w:commentReference']) {
+          const attrs = child['w:commentReference'].find((x: any) => x[':@']) || child
+          const id = attrs[':@']?.['@_w:id']
+          
+          if (id) {
+            // Transform this node into a run node
+            delete child['w:commentReference']
+            delete child[':@']
+            child['w:r'] = [
+              { 'w:t': [{ '#text': `__CR_${id}__` }] }
+            ]
+          }
+        }
+      })
+    }
+
+    const handleRun = (children: any[], alignToInject: string | null) => {
+      let color = ''
+      
+      // Find Color
+      const rPrNode = children.find(c => c['w:rPr'])
+      if (rPrNode) {
+        const rPrChildren = rPrNode['w:rPr']
+        const colorNode = rPrChildren.find((c: any) => c['w:color'])
+        if (colorNode && colorNode[':@']) {
+          color = colorNode[':@']['@_w:val']
+        }
+      }
+
+      // Find Text Node and Inject
+      const tNode = children.find(c => c['w:t'])
+      if (tNode) {
+        // w:t content is in #text usually
+        let textObj = tNode['w:t'].find((x: any) => x['#text'] !== undefined)
+        if (!textObj && tNode['w:t'].length > 0) {
+           // Maybe it's just text?
+           // In preserveOrder, content is array of objects.
+           // text content is { "#text": "..." }
+           textObj = tNode['w:t'][0]
+        }
+        
+        if (textObj) {
+            let text = textObj['#text'] || ''
+            
+            // Inject Color
+            if (color && color !== 'auto') {
+              text = `__COLOR_START_${color}__${text}__COLOR_END__`
+            }
+
+            // Inject Align
+            if (alignToInject) {
+              text = `__ALIGN_${alignToInject.toUpperCase()}__${text}`
+            }
+
+            textObj['#text'] = text
+        }
+      }
+    }
+
+    processNodeList(docObj)
+
+    const newXml = builder.build(docObj)
+    zip.updateFile('word/document.xml', Buffer.from(newXml, 'utf8'))
     return zip.toBuffer()
   } catch (e) {
-    console.error('Failed to inject comment markers:', e)
+    console.error('Preprocess XML failed:', e)
     return buffer
   }
 }
@@ -237,12 +390,12 @@ ipcMain.handle('import-word', async () => {
   try {
     const buffer = await fs.promises.readFile(filePaths[0])
     
-    // Inject markers
-    const modifiedBuffer = injectCommentMarkers(buffer)
+    // Preprocess Docx (Alignment, Color, Comments)
+    const modifiedBuffer = preprocessDocx(buffer)
     
     // Convert modified buffer
     const result = await mammoth.convertToHtml({ buffer: modifiedBuffer })
-    const comments = await extractComments(filePaths[0])
+    const comments = await extractComments(buffer)
     
     return { 
       html: result.value,
@@ -250,6 +403,47 @@ ipcMain.handle('import-word', async () => {
     }
   } catch (e: any) {
     console.error('Import failed:', e)
+    throw e
+  }
+})
+
+ipcMain.handle('create-new-paper', async () => {
+  try {
+    // 1. Determine directory (Project Root/papers)
+    const papersDir = join(process.cwd(), 'papers')
+    
+    // 2. Ensure directory exists
+    if (!fs.existsSync(papersDir)) {
+      fs.mkdirSync(papersDir, { recursive: true })
+    }
+    
+    // 3. Generate filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const fileName = `Paper_${timestamp}.paper`
+    const filePath = join(papersDir, fileName)
+    
+    // 4. Initial Data
+    const initialData = {
+      version: "1.0.0",
+      paper_info: { title: "Untitled", author: "Author", school: "School" },
+      body: [
+        { id: '1', type: 'heading', attrs: { level: 1 }, content: 'Introduction' },
+        { id: '2', type: 'paragraph', content: 'Start typing here...' }
+      ],
+      references: []
+    }
+    
+    // 5. Save initial file (this triggers VersionManager initialization in savePaper)
+    await PaperFileHandler.savePaper(filePath, initialData, {})
+    
+    return { 
+      success: true, 
+      filePath, 
+      data: initialData,
+      assets: {} 
+    }
+  } catch (e: any) {
+    console.error('Create new paper failed:', e)
     throw e
   }
 })
@@ -278,10 +472,42 @@ ipcMain.handle('save-paper', async (_, { filePath, data, assets }) => {
     return await PaperFileHandler.savePaper(targetPath, data, assetBuffers)
 })
 
+ipcMain.handle('export-docx', async (_, { data, assets, styles }) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    filters: [{ name: 'Word Document', extensions: ['docx'] }]
+  })
+  
+  if (canceled || !filePath) return false
+
+  try {
+    const buffer = await generateDocx(data, assets, styles)
+    await fs.promises.writeFile(filePath, buffer)
+    return true
+  } catch (e: any) {
+    console.error('Export failed:', e)
+    throw e
+  }
+})
+
 // Version Control Handlers
 ipcMain.handle('get-snapshots', async (_, { filePath }) => {
   if (!filePath) return []
   return await PaperFileHandler.getSnapshots(filePath)
+})
+
+ipcMain.handle('get-version-graph', async (_, { filePath }) => {
+  if (!filePath) return null
+  return await PaperFileHandler.getVersionGraph(filePath)
+})
+
+ipcMain.handle('create-branch', async (_, { filePath, name, fromNodeId }) => {
+  if (!filePath) throw new Error('File not saved yet')
+  return await PaperFileHandler.createBranch(filePath, name, fromNodeId)
+})
+
+ipcMain.handle('switch-branch', async (_, { filePath, branchId }) => {
+  if (!filePath) throw new Error('File not saved yet')
+  return await PaperFileHandler.switchBranch(filePath, branchId)
 })
 
 ipcMain.handle('create-snapshot', async (_, { filePath, data, note, type }) => {
@@ -415,6 +641,67 @@ ipcMain.handle('open-preview-window', async (_, { data, assets }) => {
   } catch (e: any) {
     console.error("Open preview failed:", e)
     throw new Error(e.message || "Open preview failed")
+  }
+})
+
+// Generate PDF for embedded preview
+ipcMain.handle('generate-preview-pdf', async (_, { data, assets }) => {
+  try {
+    // 0. Pre-process data
+    data.body.forEach((block: any) => {
+        if (block.type === 'image' && block.attrs?.src?.startsWith('data:')) {
+            let fileName = block.attrs.fileName
+            if (!fileName) {
+                const ext = block.attrs.src.split(';')[0].split('/')[1] || 'png'
+                fileName = `temp_img_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${ext}`
+                block.attrs.fileName = fileName
+            }
+            if (!assets) assets = {}
+            if (!assets[fileName]) {
+                assets[fileName] = block.attrs.src
+            }
+        }
+    })
+
+    // 0.5 Generate references.bib
+    if (data.references && data.references.length > 0) {
+        if (!assets) assets = {}
+        let bibContent = ''
+        data.references.forEach((ref: any) => {
+            if (ref.bibtex) {
+                bibContent += ref.bibtex + '\n\n'
+            } else {
+                bibContent += `@misc{${ref.id}, title={${ref.title}}, author={${ref.author}}, year={${ref.year}}}\n\n`
+            }
+        })
+        assets['references.bib'] = `data:text/plain;base64,${Buffer.from(bibContent, 'utf8').toString('base64')}`
+    }
+
+    // 1. Generate PDF
+    const renderer = new TypstRenderer()
+    const typstContent = TypstRenderer.convertToTypst(data)
+    
+    const tempDir = app.getPath('temp')
+    const outputPath = join(tempDir, `preview-${Date.now()}.pdf`)
+    
+    const assetBuffers: Record<string, Buffer> = {}
+    if (assets) {
+        for (const [name, content] of Object.entries(assets)) {
+            if (typeof content === 'string' && content.startsWith('data:')) {
+                const base64Data = content.split(',')[1]
+                assetBuffers[name] = Buffer.from(base64Data, 'base64')
+            }
+        }
+    }
+
+    const pdfPath = await renderer.renderPDF(typstContent, outputPath, assetBuffers)
+    
+    // Return the file path (as custom URL for iframe)
+    // Use query parameter to pass path safely
+    return `paper-preview://view?path=${encodeURIComponent(pdfPath)}`
+  } catch (e: any) {
+    console.error("Generate preview failed:", e)
+    throw new Error(e.message || "Generate preview failed")
   }
 })
 

@@ -1,173 +1,206 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { ipcRenderer } from 'electron'
 import { useI18n } from 'vue-i18n'
-import type { PaperData, Snapshot } from '../types/paper'
+import type { PaperData, Snapshot, VersionGraph, VersionNode } from '../types/paper'
 import * as Diff from 'diff'
+import VersionTimeline from './VersionTimeline.vue'
+import SnapshotViewer from './SnapshotViewer.vue'
+import type { Block } from '../types/paper'
 
 const { t } = useI18n()
 
 const props = defineProps<{
   currentFilePath: string
   paperData: PaperData
+  assets?: Record<string, string>
 }>()
 
-const snapshots = ref<Snapshot[]>([])
+const graph = ref<VersionGraph | null>(null)
 const isLoading = ref(false)
-const showCreateModal = ref(false)
-const snapshotNote = ref('')
+const isSaving = ref(false)
+const showBranchModal = ref(false)
+const newBranchName = ref('')
 
 // Diff Modal State
 const showDiffModal = ref(false)
 const diffParts = ref<Diff.Change[]>([])
 const diffTargetTitle = ref('')
+const viewMode = ref<'diff' | 'preview'>('diff')
+const snapshotData = ref<PaperData | null>(null)
 
-// Fetch snapshots
-const fetchSnapshots = async () => {
+// Fetch Graph
+const fetchGraph = async () => {
   if (!props.currentFilePath) return
   isLoading.value = true
   try {
-    snapshots.value = await ipcRenderer.invoke('get-snapshots', { filePath: props.currentFilePath })
+    const result = await ipcRenderer.invoke('get-version-graph', { filePath: props.currentFilePath })
+    if (result) {
+        graph.value = result
+    } else {
+        // Fallback or empty
+        graph.value = null
+    }
   } catch (e) {
-    console.error('Failed to fetch snapshots:', e)
+    console.error('Failed to fetch version graph:', e)
   } finally {
     isLoading.value = false
   }
 }
 
 // Watch for file path changes
-watch(() => props.currentFilePath, fetchSnapshots)
+watch(() => props.currentFilePath, fetchGraph)
 
-onMounted(fetchSnapshots)
+onMounted(fetchGraph)
 
-// Create Snapshot
-const openCreateModal = () => {
-  snapshotNote.value = ''
-  showCreateModal.value = true
+// Create Branch
+const openBranchModal = () => {
+    newBranchName.value = ''
+    showBranchModal.value = true
 }
 
-const createSnapshot = async () => {
-  if (!props.currentFilePath) {
-    alert(t('common.save') + ' ' + t('activityBar.file') + ' ' + t('common.first') || 'Please save the file first.')
-    return
-  }
-  
-  try {
-    await ipcRenderer.invoke('create-snapshot', {
-      filePath: props.currentFilePath,
-      data: props.paperData,
-      note: snapshotNote.value || t('version.manual'),
-      type: 'manual'
-    })
-    showCreateModal.value = false
-    await fetchSnapshots()
-  } catch (e: any) {
-    alert('Failed to create snapshot: ' + e.message)
-  }
+const createBranch = async () => {
+    if (!props.currentFilePath) {
+        alert(t('version.saveFirst'))
+        return
+    }
+    
+    isSaving.value = true
+    try {
+        await ipcRenderer.invoke('create-branch', {
+            filePath: props.currentFilePath,
+            name: newBranchName.value || `Branch ${Date.now()}`
+        })
+        showBranchModal.value = false
+        await fetchGraph()
+    } catch (e: any) {
+        alert('Failed to create branch: ' + e.message)
+    } finally {
+        isSaving.value = false
+    }
 }
 
-// Compare Snapshot
+// Switch / Revert
+const emit = defineEmits<{
+    (e: 'reload'): void
+    (e: 'restore-block', block: Block): void
+}>()
+
+const handleSwitch = async (nodeId: string) => {
+    // Check if node belongs to a branch head, if so switch branch
+    // Or just load the content?
+    // "Clicking dot to revert or switch"
+    // If we click a past node, we usually just load its content as a preview or "detached head" state?
+    // For simplicity: Load content and ask if they want to revert (overwrite current) or checkout (switch branch).
+    // Actually, VersionManager has `switchBranch`. 
+    // But clicking a specific NODE might not be a branch head.
+    
+    // For now: Just load snapshot content and show Diff, then offer "Restore"
+    const node = graph.value?.nodes[nodeId]
+    if (node) {
+        compareSnapshot(node)
+    }
+}
+
+// Compare & Restore
 const flattenPaper = (data: PaperData): string => {
   return data.body.map(b => {
     if (typeof b.content === 'string') return b.content
-    // Handle nested content (e.g. lists) if necessary
     return '' 
   }).join('\n\n')
 }
 
-const compareSnapshot = async (snapshot: Snapshot) => {
+const compareSnapshot = async (node: VersionNode) => {
   try {
-    const snapshotData: PaperData = await ipcRenderer.invoke('load-snapshot', {
+    const data: PaperData = await ipcRenderer.invoke('load-snapshot', {
       filePath: props.currentFilePath,
-      snapshotId: snapshot.id
+      snapshotId: node.id
     })
     
+    snapshotData.value = data
+    
     const currentText = flattenPaper(props.paperData)
-    const oldText = flattenPaper(snapshotData)
+    const oldText = flattenPaper(data)
     
     diffParts.value = Diff.diffWords(oldText, currentText)
-    diffTargetTitle.value = `${t('version.compare')}: ${snapshot.note} (${formatDate(snapshot.timestamp)})`
+    diffTargetTitle.value = `${t('version.compare')}: ${node.note} (${new Date(node.timestamp).toLocaleString()})`
     showDiffModal.value = true
+    viewMode.value = 'diff'
   } catch (e: any) {
     alert('Failed to load snapshot for comparison: ' + e.message)
   }
 }
 
-const formatDate = (ts: number) => {
-  return new Date(ts).toLocaleString()
+const handleRestoreBlock = (block: Block) => {
+    emit('restore-block', block)
+    alert(t('version.restored') || 'Block restored')
 }
+
+const activeNodeId = computed(() => {
+    // We don't easily know which node corresponds to current unsaved content.
+    // But we know the HEAD of active branch.
+    if (graph.value) {
+        const branch = graph.value.branches[graph.value.activeBranchId]
+        return branch?.headNodeId
+    }
+    return undefined
+})
+
 </script>
 
 <template>
   <div class="h-full bg-gray-50 flex flex-col relative">
     <!-- Header -->
-    <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
-      <h2 class="text-xs font-bold text-gray-700 uppercase">{{ t('version.title') }}</h2>
-      <button 
-        @click="openCreateModal"
-        class="text-gray-600 hover:text-blue-600 p-1 rounded hover:bg-gray-100"
-        :title="t('version.createSnapshot')"
-      >
-        <!-- Camera Icon -->
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </button>
+    <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-white shadow-sm z-10">
+      <div>
+          <h2 class="text-xs font-bold text-gray-700 uppercase">{{ t('version.title') }}</h2>
+          <div v-if="graph" class="text-[10px] text-gray-500 flex items-center gap-1">
+             <span class="w-2 h-2 rounded-full inline-block" :style="{ backgroundColor: graph.branches[graph.activeBranchId]?.color }"></span>
+             {{ graph.branches[graph.activeBranchId]?.name }}
+          </div>
+      </div>
+      <div class="flex space-x-1">
+          <button 
+            @click="openBranchModal"
+            class="text-gray-600 hover:text-purple-600 p-1 rounded hover:bg-gray-100"
+            :title="t('version.createBranch')"
+          >
+            <!-- Plus Icon for Branch -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+      </div>
     </div>
 
-    <!-- List -->
-    <div class="flex-1 overflow-y-auto p-4 space-y-4">
-      <div v-if="snapshots.length === 0" class="text-center text-gray-400 text-sm mt-10">
+    <!-- Timeline -->
+    <div class="flex-1 overflow-y-auto overflow-x-hidden relative">
+      <VersionTimeline 
+        v-if="graph" 
+        :graph="graph" 
+        :active-node-id="activeNodeId"
+        @switch="handleSwitch"
+      />
+      <div v-else class="text-center text-gray-400 text-sm mt-10">
         {{ t('version.noSnapshots') }}
       </div>
-
-      <div 
-        v-for="snap in snapshots" 
-        :key="snap.id" 
-        class="relative pl-4 border-l-2 hover:bg-gray-100 p-2 rounded cursor-pointer transition-colors group"
-        :class="snap.type === 'auto' ? 'border-gray-300' : 'border-blue-500'"
-      >
-        <!-- Dot -->
-        <div 
-          class="absolute -left-[5px] top-4 w-2 h-2 rounded-full"
-          :class="snap.type === 'auto' ? 'bg-gray-400' : 'bg-blue-500'"
-        ></div>
-
-        <div class="flex justify-between items-start">
-          <div>
-            <div class="text-sm font-medium text-gray-800">{{ snap.note }}</div>
-            <div class="text-xs text-gray-500">{{ formatDate(snap.timestamp) }}</div>
-            <div class="text-xs text-gray-400 mt-1" v-if="snap.wordCount">{{ snap.wordCount }} {{ t('version.words') }}</div>
-          </div>
-        </div>
-
-        <!-- Actions (visible on hover) -->
-        <div class="mt-2 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button 
-            @click.stop="compareSnapshot(snap)"
-            class="text-xs bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50 text-gray-700"
-          >
-            {{ t('version.compare') }}
-          </button>
-        </div>
-      </div>
     </div>
 
-    <!-- Create Modal -->
-    <div v-if="showCreateModal" class="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+    <!-- Create Branch Modal -->
+    <div v-if="showBranchModal" class="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
       <div class="bg-white p-4 rounded-lg shadow-xl w-64">
-        <h3 class="text-sm font-bold mb-2">{{ t('version.modalTitle') }}</h3>
+        <h3 class="text-sm font-bold mb-2">{{ t('version.branchTitle') || 'New Branch' }}</h3>
         <input 
-          v-model="snapshotNote"
+          v-model="newBranchName"
           type="text" 
-          :placeholder="t('version.placeholder')" 
-          class="w-full border border-gray-300 rounded p-2 text-sm mb-3 focus:outline-none focus:border-blue-500"
-          @keyup.enter="createSnapshot"
+          placeholder="Branch Name (e.g. Experiment A)" 
+          class="w-full border border-gray-300 rounded p-2 text-sm mb-3 focus:outline-none focus:border-purple-500"
+          @keyup.enter="createBranch"
+          :disabled="isSaving"
         />
         <div class="flex justify-end space-x-2">
-          <button @click="showCreateModal = false" class="text-xs text-gray-500 hover:text-gray-700">{{ t('version.cancel') }}</button>
-          <button @click="createSnapshot" class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">{{ t('version.save') }}</button>
+          <button @click="showBranchModal = false" class="text-xs text-gray-500 hover:text-gray-700" :disabled="isSaving">{{ t('version.cancel') }}</button>
+          <button @click="createBranch" class="text-xs bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isSaving">{{ isSaving ? t('version.saving') : t('version.save') }}</button>
         </div>
       </div>
     </div>
@@ -175,7 +208,21 @@ const formatDate = (ts: number) => {
     <!-- Diff Modal (Full Screen Overlay) -->
     <div v-if="showDiffModal" class="fixed inset-0 bg-white z-50 flex flex-col">
       <div class="h-12 border-b border-gray-200 flex items-center justify-between px-4 bg-gray-50">
-        <h2 class="font-bold text-gray-700">{{ diffTargetTitle }}</h2>
+        <div class="flex items-center gap-4">
+            <h2 class="font-bold text-gray-700">{{ diffTargetTitle }}</h2>
+            <div class="flex bg-gray-200 rounded p-1 text-xs">
+                <button 
+                    @click="viewMode = 'diff'"
+                    class="px-3 py-1 rounded transition-colors"
+                    :class="viewMode === 'diff' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'"
+                >Text Diff</button>
+                <button 
+                    @click="viewMode = 'preview'"
+                    class="px-3 py-1 rounded transition-colors"
+                    :class="viewMode === 'preview' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'"
+                >Preview & Restore</button>
+            </div>
+        </div>
         <button @click="showDiffModal = false" class="text-gray-500 hover:text-gray-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -183,7 +230,8 @@ const formatDate = (ts: number) => {
         </button>
       </div>
       <div class="flex-1 overflow-auto p-8 max-w-4xl mx-auto w-full prose prose-sm">
-        <div class="bg-white p-8 shadow-sm border border-gray-100 rounded-lg min-h-full">
+        <!-- Text Diff Mode -->
+        <div v-if="viewMode === 'diff'" class="bg-white p-8 shadow-sm border border-gray-100 rounded-lg min-h-full">
             <span v-for="(part, index) in diffParts" :key="index"
               :class="{
                 'bg-green-100 text-green-800 px-0.5 rounded': part.added,
@@ -191,6 +239,15 @@ const formatDate = (ts: number) => {
                 'text-gray-800': !part.added && !part.removed
               }"
             >{{ part.value }}</span>
+        </div>
+
+        <!-- Preview & Restore Mode -->
+        <div v-else-if="viewMode === 'preview' && snapshotData" class="bg-white shadow-sm border border-gray-100 rounded-lg min-h-full">
+            <SnapshotViewer 
+                :blocks="snapshotData.body" 
+                :assets="assets || {}"
+                @restore="handleRestoreBlock"
+            />
         </div>
       </div>
     </div>

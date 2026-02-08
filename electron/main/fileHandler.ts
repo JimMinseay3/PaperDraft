@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import type { PaperData, Snapshot, HistoryIndex } from '../../src/types/paper';
+import type { PaperData, Snapshot, HistoryIndex, VersionGraph, Branch, VersionNode } from '../../src/types/paper';
+import { VersionManager } from './versionManager';
 
 export class PaperFileHandler {
   // Load .paper file
@@ -50,13 +51,17 @@ export class PaperFileHandler {
         zip = new AdmZip(filePath);
       } else {
         zip = new AdmZip();
+        // Initialize version graph for new files
+        VersionManager.saveGraph(zip, VersionManager.createInitialGraph());
+        // Create initial snapshot for the new file
+        // We use 'milestone' to mark it as a significant version (Initial Version)
+        VersionManager.commit(zip, data, "Initial Version", 'milestone');
       }
       
-      // Update content.json
+      // Update content.json (Working Directory)
       zip.addFile('content.json', Buffer.from(JSON.stringify(data, null, 2)));
       
       // Update assets
-      // Note: This adds/overwrites assets. It doesn't delete unused ones (which is safer for history)
       for (const [assetName, assetData] of Object.entries(assets)) {
         if (assetData instanceof Buffer) {
           zip.addFile(`assets/${assetName}`, assetData);
@@ -72,77 +77,90 @@ export class PaperFileHandler {
     }
   }
 
-  // Create Snapshot
-  static async createSnapshot(filePath: string, data: PaperData, note: string, type: 'manual' | 'auto'): Promise<Snapshot> {
+  // Create Snapshot (Delegates to VersionManager)
+  static async createSnapshot(filePath: string, data: PaperData, note: string, type: 'manual' | 'auto'): Promise<VersionNode> {
     try {
       if (!fs.existsSync(filePath)) {
         throw new Error('Cannot create snapshot: File does not exist. Save first.');
       }
 
       const zip = new AdmZip(filePath);
-      const timestamp = Date.now();
-      const id = `v${timestamp}`;
       
-      // 1. Save Content Copy
-      const contentStr = JSON.stringify(data, null, 2);
-      zip.addFile(`history/${id}_content.json`, Buffer.from(contentStr));
-
-      // 2. Update History Index
-      let historyIndex: HistoryIndex = { snapshots: [] };
-      const indexEntry = zip.getEntry('history/index.json');
-      if (indexEntry) {
-        const indexStr = zip.readAsText(indexEntry);
-        try {
-          historyIndex = JSON.parse(indexStr);
-        } catch (e) {
-          console.error('Failed to parse history index, creating new one');
-        }
-      }
-
-      // Calculate word count (simple approximation)
-      let wordCount = 0;
-      data.body.forEach(b => {
-        if (typeof b.content === 'string') {
-          wordCount += b.content.length;
-        }
-      });
-
-      const snapshot: Snapshot = {
-        id,
-        timestamp,
-        note,
-        type,
-        wordCount
-      };
-
-      historyIndex.snapshots.unshift(snapshot); // Add to top
+      // Use VersionManager to commit
+      const node = VersionManager.commit(zip, data, note, type === 'manual' ? 'milestone' : 'snapshot');
       
-      // Limit auto snapshots if needed? For now keep all.
-      
-      zip.addFile('history/index.json', Buffer.from(JSON.stringify(historyIndex, null, 2)));
-
       zip.writeZip(filePath);
-      return snapshot;
+      return node;
 
     } catch (error: any) {
       throw new Error(`Failed to create snapshot: ${error.message}`);
     }
   }
 
-  // Get Snapshots List
+  // Get Version Graph
+  static async getVersionGraph(filePath: string): Promise<VersionGraph> {
+    try {
+      if (!fs.existsSync(filePath)) return VersionManager.createInitialGraph();
+      const zip = new AdmZip(filePath);
+      return VersionManager.getGraph(zip);
+    } catch (error) {
+      console.error('Failed to get version graph:', error);
+      return VersionManager.createInitialGraph();
+    }
+  }
+
+  // Create Branch
+  static async createBranch(filePath: string, name: string, fromNodeId?: string): Promise<Branch> {
+    try {
+        if (!fs.existsSync(filePath)) throw new Error('File not found');
+        const zip = new AdmZip(filePath);
+        const branch = VersionManager.createBranch(zip, name, fromNodeId);
+        zip.writeZip(filePath);
+        return branch;
+    } catch (e: any) {
+        throw new Error(`Failed to create branch: ${e.message}`);
+    }
+  }
+
+  // Switch Branch
+  static async switchBranch(filePath: string, branchId: string): Promise<PaperData> {
+      try {
+          if (!fs.existsSync(filePath)) throw new Error('File not found');
+          const zip = new AdmZip(filePath);
+          
+          const result = VersionManager.switchBranch(zip, branchId);
+          
+          if (result.success && result.data) {
+              // Update working copy content.json
+              zip.addFile('content.json', Buffer.from(JSON.stringify(result.data, null, 2)));
+              zip.writeZip(filePath);
+              return result.data;
+          }
+          
+          // If no data (empty branch), return current or empty?
+          // For now, assume branch always has a head if created properly, 
+          // or we just initialized it.
+          // If empty, maybe return empty paper?
+          return this.createNewPaper(); // Fallback
+          
+      } catch (e: any) {
+          throw new Error(`Failed to switch branch: ${e.message}`);
+      }
+  }
+
+  // Legacy Support: Get Snapshots List (Mapped from Graph)
   static async getSnapshots(filePath: string): Promise<Snapshot[]> {
     try {
-      if (!fs.existsSync(filePath)) return [];
-      
-      const zip = new AdmZip(filePath);
-      const indexEntry = zip.getEntry('history/index.json');
-      if (!indexEntry) return [];
-      
-      const indexStr = zip.readAsText(indexEntry);
-      const index = JSON.parse(indexStr) as HistoryIndex;
-      return index.snapshots || [];
+      const graph = await this.getVersionGraph(filePath);
+      // Flatten nodes to list for legacy view
+      return Object.values(graph.nodes).map((node): Snapshot => ({
+          id: node.id,
+          timestamp: node.timestamp,
+          note: node.note,
+          type: node.type === 'milestone' ? 'manual' : 'auto',
+          wordCount: node.wordCount
+      })).sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
-      console.error('Failed to get snapshots:', error);
       return [];
     }
   }
@@ -151,15 +169,17 @@ export class PaperFileHandler {
   static async loadSnapshot(filePath: string, snapshotId: string): Promise<PaperData> {
     try {
       const zip = new AdmZip(filePath);
-      const entryName = `history/${snapshotId}_content.json`;
-      const entry = zip.getEntry(entryName);
-      
-      if (!entry) {
-        throw new Error(`Snapshot content not found: ${entryName}`);
+      const graph = VersionManager.getGraph(zip);
+      const node = graph.nodes[snapshotId];
+      if (!node) {
+          // Fallback to legacy path check
+          try {
+             const entry = zip.getEntry(`history/${snapshotId}_content.json`);
+             if (entry) return JSON.parse(zip.readAsText(entry));
+          } catch(e) {}
+          throw new Error('Snapshot not found');
       }
-      
-      const contentStr = zip.readAsText(entry);
-      return JSON.parse(contentStr) as PaperData;
+      return VersionManager.loadNodeData(zip, node);
     } catch (error: any) {
       throw new Error(`Failed to load snapshot: ${error.message}`);
     }
