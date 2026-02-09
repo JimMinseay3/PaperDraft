@@ -185,14 +185,27 @@ export class VersionManager {
     return newBranch;
   }
 
-  static switchBranch(zip: AdmZip, branchId: string): boolean {
+  static switchBranch(zip: AdmZip, branchId: string): { success: boolean; data?: PaperData } {
     const graph = this.getGraph(zip);
     if (!graph.branches[branchId]) {
         throw new Error(`Branch ${branchId} not found`);
     }
     graph.activeBranchId = branchId;
+    
+    // Get the data of the HEAD node of the switched branch
+    const headNodeId = graph.branches[branchId].headNodeId;
+    let data: PaperData | undefined = undefined;
+    
+    if (headNodeId && graph.nodes[headNodeId]) {
+        try {
+            data = this.loadNodeData(zip, graph.nodes[headNodeId]);
+        } catch (e) {
+            console.error(`Failed to load data for branch HEAD ${headNodeId}:`, e);
+        }
+    }
+    
     this.saveGraph(zip, graph);
-    return true;
+    return { success: true, data };
   }
 
   static deleteSnapshot(zip: AdmZip, snapshotId: string): boolean {
