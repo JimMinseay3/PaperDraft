@@ -6,7 +6,7 @@
     "typography": "排版",
     "resources": "资源",
     "version": "版本控制",
-    "preview": "预览",
+    "preview": "PDF 预览",
     "settings": "设置"
   },
   "menu": {
@@ -45,6 +45,27 @@
     "noHeadings": "未找到标题",
     "untitled": "无标题"
   },
+  "citations": {
+    "title": "引用文献库",
+    "importBibtex": "导入 BibTeX",
+    "addManually": "手动添加",
+    "noCitations": "暂无引用文献",
+    "addDescription": "添加参考文献以在论文中引用它们。",
+    "bibtexPlaceholder": "在此粘贴 BibTeX 内容...",
+    "import": "导入",
+    "cancel": "取消",
+    "add": "添加",
+    "confirmDelete": "确定要移除此参考文献吗？",
+    "journalArticle": "期刊论文",
+    "book": "书籍",
+    "conferencePaper": "会议论文",
+    "thesis": "学位论文",
+    "titleLabel": "标题",
+    "authorLabel": "作者",
+    "yearLabel": "年份",
+    "journalLabel": "期刊 / 出版商",
+    "selectCitation": "选择引用"
+  },
   "resources": {
     "title": "资源管理器",
     "images": "图片",
@@ -55,23 +76,26 @@
     "table": "表格"
   },
   "version": {
-    "title": "版本历史",
-    "createSnapshot": "创建快照",
+    "title": "存档列表",
+    "createSnapshot": "新建存档",
     "createBranch": "创建分支",
-    "noSnapshots": "暂无快照",
+    "noSnapshots": "暂无存档",
     "compare": "比对",
-    "modalTitle": "创建新快照",
+    "modalTitle": "新建存档",
     "branchTitle": "新建分支",
-    "placeholder": "这一版主要改了什么？",
+    "placeholder": "请输入存档名称",
     "cancel": "取消",
     "save": "保存",
     "saving": "保存中...",
     "restoreBlock": "恢复此块",
     "restored": "已恢复区块",
-    "saveFirst": "请先保存文件后再进行版本操作",
+    "saveFirst": "请先保存文件后再进行存档操作",
     "autoSave": "自动保存",
     "manual": "手动",
-    "words": "字"
+    "words": "字",
+    "currentUnsaved": "当前更改 (未保存)",
+    "confirmDelete": "确定要删除此存档吗？此操作无法撤销。",
+    "confirmRestoreAll": "确定要读取此存档吗？当前未保存的更改将被覆盖。"
   },
   "settings": {
     "title": "设置",
@@ -81,10 +105,29 @@
     "themeDark": "深色 (即将推出)",
     "about": "关于"
   },
+  "typography": {
+    "title": "排版样式",
+    "globalFonts": "全局字体",
+    "enFont": "英文/数字字体",
+    "zhFont": "中文字体",
+    "heading1": "一级标题",
+    "heading2": "二级标题",
+    "heading3": "三级标题",
+    "heading4": "四级标题",
+    "bodyText": "正文文本",
+    "size": "字号",
+    "color": "颜色",
+    "spacingBefore": "段前间距",
+    "spacingAfter": "段后间距",
+    "paragraphLayout": "段落布局",
+    "firstLineIndent": "首行缩进",
+    "lineHeight": "行高"
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",
     "save": "保存",
-    "delete": "删除"
+    "delete": "删除",
+    "restore": "恢复"
   }
 }

@@ -97,6 +97,7 @@ export class TypstRenderer {
     let typstContent = `#set page("a4")
 #set text(size: 12pt, font: ("SimSun", "Times New Roman"))
 #set heading(numbering: none)
+#set par(first-line-indent: 2em, justify: true)
 
 `;
 
@@ -110,7 +111,11 @@ export class TypstRenderer {
           break;
           
         case 'paragraph':
-          typstContent += `${content}\n\n`;
+          if (content.trim() === '') {
+            typstContent += `#v(1em)\n\n`;
+          } else {
+            typstContent += `${content}\n\n`;
+          }
           break;
           
         case 'image':

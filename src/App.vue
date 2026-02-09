@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { ipcRenderer } from 'electron'
 import TitleBar from './components/TitleBar.vue'
 import ActivityBar from './components/ActivityBar.vue'
@@ -33,10 +33,12 @@ const previewPdfUrl = ref<string | null>(null)
 const isRendering = ref(false)
 const editorRef = ref<any>(null)
 const activeView = ref('file')
-const showAssistant = ref(false)
+const showAssistant = ref(true)
 const isMathReferenceActive = ref(false)
 const documentComments = ref<any[]>([])
 const showWelcome = ref(true)
+const isDirty = ref(false)
+const isEditorReadonly = ref(false)
 
 // Global Styles State
 const globalStyles = ref({
@@ -112,6 +114,13 @@ onMounted(() => {
   nextTick(() => {
     console.log('[App] UI Mounted, removing splash screen...')
     window.postMessage({ payload: 'removeLoading' }, '*')
+    
+    // Watch for changes after initial load
+    watch(() => paperData.value, () => {
+      if (!showWelcome.value) {
+        isDirty.value = true
+      }
+    }, { deep: true })
   })
 })
 
@@ -163,6 +172,7 @@ const createNewPaper = async () => {
       assets.value = result.assets
       currentFilePath.value = result.filePath
       showWelcome.value = false
+      isDirty.value = false
     }
   } catch (e: any) {
     alert('Failed to create new paper: ' + e.message)
@@ -177,6 +187,7 @@ const loadProject = async () => {
       assets.value = result.assets
       currentFilePath.value = result.filePath
       showWelcome.value = false
+      isDirty.value = false
     }
   } catch (e: any) {
     alert('Failed to load: ' + e.message)
@@ -213,6 +224,7 @@ const importWord = async () => {
         documentComments.value = []
       }
       showWelcome.value = false
+      isDirty.value = false
     }
   } catch (e: any) {
     alert('Failed to import Word file: ' + e.message)
@@ -233,6 +245,7 @@ const saveProject = async () => {
     
     if (result && result.success) {
       currentFilePath.value = result.filePath
+      isDirty.value = false
       alert('Saved successfully!')
     }
   } catch (e: any) {
@@ -344,12 +357,21 @@ const handleRestoreBlock = (block: any) => {
     paperData.value.body.push({ ...block })
     console.log('[App] Block appended')
   }
-  
+
   // 2. Trigger render/scroll
   triggerRender()
   setTimeout(() => {
     scrollToBlock(block.id)
   }, 100)
+}
+
+const handleRestoreAll = (blocks: any[]) => {
+  console.log('[App] Restoring all blocks:', blocks.length)
+  // Replace entire body
+  paperData.value.body = JSON.parse(JSON.stringify(blocks))
+  alert('Restored version successfully!')
+  isEditorReadonly.value = false // Ensure editable after restore
+  triggerRender()
 }
 
 // Initial render
@@ -358,7 +380,7 @@ onMounted(() => {
 
   // Auto-save Snapshot every 30 minutes
   setInterval(async () => {
-    if (currentFilePath.value && paperData.value) {
+    if (currentFilePath.value && paperData.value && isDirty.value) {
       try {
         console.log('[AutoSave] Creating auto snapshot...')
         // Deep clone to remove Vue reactivity proxies
@@ -403,7 +425,7 @@ onMounted(() => {
       </div>
 
       <!-- 2. Outline/Sidebar (240px fixed) -->
-      <div class="w-[240px] flex-none border-r border-gray-300 bg-white flex flex-col">
+      <div v-if="!showWelcome" class="w-[240px] flex-none border-r border-gray-300 bg-white flex flex-col">
         <Sidebar 
           :is-empty="showWelcome"
           :blocks="paperData.body" 
@@ -422,6 +444,7 @@ onMounted(() => {
           v-model="paperData.body" 
           :assets="assets"
           :references="paperData.references || []"
+          :readonly="isEditorReadonly"
           @change="triggerRender" 
           @add-asset="addAsset"
         />
@@ -467,12 +490,15 @@ onMounted(() => {
             @jump="(id, query) => scrollToBlock(id, query)"
           />
           <VersionSidebar 
-            v-if="activeView === 'version'" 
-            :current-file-path="currentFilePath"
-            :paper-data="paperData"
-            :assets="assets"
-            @restore-block="handleRestoreBlock"
-          />
+          v-if="activeView === 'version'" 
+          :current-file-path="currentFilePath" 
+          :paper-data="paperData"
+          :assets="assets"
+          :is-dirty="isDirty"
+          @restore-block="handleRestoreBlock"
+          @restore-all="handleRestoreAll"
+          @set-readonly="isEditorReadonly = $event"
+        />
           <ResourceSidebar 
             v-if="activeView === 'resources'" 
             :blocks="paperData.body"

@@ -8,11 +8,30 @@ const { t } = useI18n()
 const props = defineProps<{
   blocks: Block[]
   assets: Record<string, string>
+  allowRestore?: boolean
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'restore', block: Block): void
 }>()
+
+// Helper to get text from nested content
+const getPlainText = (content: any): string => {
+  if (!content) return ''
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content.map(item => {
+      if (typeof item === 'string') return item
+      if (item && typeof item === 'object') {
+        if (item.text) return item.text
+        if (item.content) return getPlainText(item.content)
+      }
+      return ''
+    }).join('')
+  }
+  return ''
+}
 
 // Helper to resolve image src
 const resolveSrc = (block: Block) => {
@@ -43,6 +62,7 @@ const resolveSrc = (block: Block) => {
     >
       <!-- Restore Button (Visible on Hover) -->
       <button 
+        v-if="allowRestore && !readonly"
         @click="emit('restore', block)"
         class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-blue-500 text-white text-xs px-2 py-1 rounded shadow hover:bg-blue-600 transition-opacity z-10"
       >
@@ -64,39 +84,34 @@ const resolveSrc = (block: Block) => {
             'text-base': block.attrs?.level >= 4
           }"
         >
-          {{ block.content }}
+          {{ getPlainText(block.content) }}
         </component>
 
         <!-- Paragraph -->
         <p v-else-if="block.type === 'paragraph'" class="text-gray-700 leading-relaxed whitespace-pre-wrap">
-          {{ block.content || (block.content === '' ? '&nbsp;' : '') }}
+          {{ getPlainText(block.content) || (block.content === '' ? '&nbsp;' : '') }}
         </p>
 
         <!-- Image -->
-        <div v-else-if="block.type === 'image'" class="flex justify-center">
+        <div v-else-if="block.type === 'image'" class="flex flex-col items-center">
           <img 
             :src="resolveSrc(block)" 
             class="max-w-full h-auto rounded shadow-sm max-h-[300px]" 
             :title="block.attrs?.title"
           />
-          <div v-if="block.attrs?.caption" class="text-center text-xs text-gray-500 mt-1">
-            {{ block.attrs.caption }}
+          <div v-if="block.attrs?.caption" class="text-center text-xs text-gray-500 mt-2">
+            {{ getPlainText(block.attrs.caption) }}
           </div>
         </div>
 
-        <!-- List (Simplified) -->
+        <!-- List -->
         <div v-else-if="block.type === 'list'" class="pl-4">
-           <!-- Note: TipTap lists are complex recursive structures. 
-                Our 'Block' type might need adjustment if we store lists as flat blocks or nested.
-                Assuming flat block for now or simple text content.
-                If complex, we might just show "List Item".
-           -->
-           <li class="list-disc">{{ block.content }}</li>
+           <li class="list-disc text-gray-700">{{ getPlainText(block.content) }}</li>
         </div>
         
         <!-- Fallback -->
         <div v-else class="text-gray-400 text-xs italic">
-          [{{ block.type }}] {{ typeof block.content === 'string' ? block.content : 'Complex content' }}
+          [{{ block.type }}] {{ getPlainText(block.content) || 'Complex content' }}
         </div>
 
       </div>

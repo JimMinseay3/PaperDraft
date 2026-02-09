@@ -46,6 +46,7 @@ const props = defineProps<{
   modelValue: Block[]
   assets?: Record<string, string> // Map of filename -> base64
   references?: Reference[]
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -207,6 +208,7 @@ const FlashHighlight = Mark.create({
 
 const editor = useEditor({
   content: mapBlocksToTipTap(props.modelValue),
+  editable: !props.readonly,
   editorProps: {
     handleDrop: (view, event, slice, moved) => {
       const sourcePos = (window as any).__draggedNodePos
@@ -430,6 +432,12 @@ watch(() => props.modelValue, (newValue) => {
     editor.value.commands.setContent(mapBlocksToTipTap(newValue))
   }
 }, { deep: true })
+
+watch(() => props.readonly, (newReadonly) => {
+  if (editor.value) {
+    editor.value.setEditable(!newReadonly)
+  }
+})
 
 onBeforeUnmount(() => {
   editor.value?.destroy()

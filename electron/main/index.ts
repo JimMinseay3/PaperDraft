@@ -9,6 +9,7 @@ import mammoth from 'mammoth'
 import AdmZip from 'adm-zip'
 import { XMLParser, XMLBuilder } from 'fast-xml-parser'
 import { generateDocx } from './docxGenerator'
+import type { PaperData } from '../../src/types/paper'
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -423,7 +424,7 @@ ipcMain.handle('create-new-paper', async () => {
     const filePath = join(papersDir, fileName)
     
     // 4. Initial Data
-    const initialData = {
+    const initialData: PaperData = {
       version: "1.0.0",
       paper_info: { title: "Untitled", author: "Author", school: "School" },
       body: [
@@ -513,6 +514,16 @@ ipcMain.handle('switch-branch', async (_, { filePath, branchId }) => {
 ipcMain.handle('create-snapshot', async (_, { filePath, data, note, type }) => {
   if (!filePath) throw new Error('File not saved yet')
   return await PaperFileHandler.createSnapshot(filePath, data, note, type)
+})
+
+ipcMain.handle('save-autosave', async (_, { filePath, data }) => {
+  if (!filePath) return null
+  return await PaperFileHandler.saveAutosave(filePath, data)
+})
+
+ipcMain.handle('delete-snapshot', async (_, { filePath, snapshotId }) => {
+  if (!filePath) throw new Error('File not saved yet')
+  return await PaperFileHandler.deleteSnapshot(filePath, snapshotId)
 })
 
 ipcMain.handle('load-snapshot', async (_, { filePath, snapshotId }) => {

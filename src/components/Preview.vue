@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+import { Eye } from 'lucide-vue-next'
+
+const { t } = useI18n()
+
 defineProps<{
   pdfUrl: string | null
   loading: boolean
@@ -6,9 +11,13 @@ defineProps<{
 </script>
 
 <template>
-  <div class="preview-container h-full flex flex-col bg-gray-100">
-    <div class="p-2 bg-gray-200 border-b border-gray-300 flex justify-between items-center">
-      <span class="font-bold text-sm text-gray-700">Copilot / Preview</span>
+  <div class="preview-container h-full flex flex-col bg-white">
+    <!-- Header -->
+    <div class="h-10 px-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
+      <h2 class="text-xs font-bold text-gray-700 uppercase flex items-center">
+        <Eye class="w-4 h-4 mr-2 text-blue-500" />
+        {{ t('activityBar.preview') }}
+      </h2>
       <span v-if="loading" class="text-xs text-blue-600 animate-pulse">Rendering...</span>
     </div>
     

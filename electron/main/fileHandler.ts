@@ -97,6 +97,20 @@ export class PaperFileHandler {
     }
   }
 
+  static async saveAutosave(filePath: string, data: PaperData): Promise<VersionNode> {
+    try {
+      if (!fs.existsSync(filePath)) {
+        throw new Error('Cannot autosave: File does not exist.');
+      }
+      const zip = new AdmZip(filePath);
+      const node = VersionManager.saveAutosave(zip, data);
+      zip.writeZip(filePath);
+      return node;
+    } catch (error: any) {
+      throw new Error(`Failed to autosave: ${error.message}`);
+    }
+  }
+
   // Get Version Graph
   static async getVersionGraph(filePath: string): Promise<VersionGraph> {
     try {
@@ -162,6 +176,19 @@ export class PaperFileHandler {
       })).sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
       return [];
+    }
+  }
+
+  static async deleteSnapshot(filePath: string, snapshotId: string): Promise<boolean> {
+    try {
+      const zip = new AdmZip(filePath);
+      const result = VersionManager.deleteSnapshot(zip, snapshotId);
+      if (result) {
+        zip.writeZip(filePath);
+      }
+      return result;
+    } catch (error: any) {
+      throw new Error(`Failed to delete snapshot: ${error.message}`);
     }
   }
 

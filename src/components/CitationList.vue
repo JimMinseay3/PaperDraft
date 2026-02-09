@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { BookOpen } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { Reference } from '../types/paper'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   items: Reference[]
@@ -57,7 +60,7 @@ defineExpose({
 <template>
   <div class="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden z-[9999] w-72 max-h-64 flex flex-col">
     <div class="text-[10px] font-semibold text-gray-400 px-2 py-1 uppercase tracking-wider bg-gray-50 border-b border-gray-100">
-      Select Citation
+      {{ t('citations.selectCitation') }}
     </div>
     <div class="overflow-y-auto">
       <template v-if="items.length">
@@ -78,7 +81,7 @@ defineExpose({
         </button>
       </template>
       <div v-else class="px-3 py-4 text-center text-xs text-gray-500 italic">
-        No matching citations found
+        {{ t('sidebar.noHeadings') }}
       </div>
     </div>
   </div>

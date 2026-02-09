@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Plus, Trash2, BookOpen, Upload, Download } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import type { Reference } from '../types/paper'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   references: Reference[]
@@ -101,7 +104,7 @@ const generateBibtex = (ref: Reference, id: string) => {
 }
 
 const removeReference = (id: string) => {
-  if (confirm('Are you sure you want to remove this reference?')) {
+  if (confirm(t('citations.confirmDelete'))) {
     emit('remove-reference', id)
   }
 }
@@ -110,23 +113,23 @@ const removeReference = (id: string) => {
 <template>
   <div class="h-full flex flex-col bg-white" @dragover.prevent @drop.prevent="handleDrop">
     <!-- Header -->
-    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+    <div class="h-10 px-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
       <h2 class="text-xs font-bold text-gray-700 uppercase flex items-center">
         <BookOpen class="w-4 h-4 mr-2 text-blue-500" />
-        Citation Library
+        {{ t('citations.title') }}
       </h2>
       <div class="flex space-x-1">
         <button 
           @click="showBibtexImport = !showBibtexImport"
           class="p-1 hover:bg-gray-200 rounded text-gray-600"
-          title="Import BibTeX"
+          :title="t('citations.importBibtex')"
         >
           <Upload class="w-4 h-4" />
         </button>
         <button 
           @click="isAdding = !isAdding"
           class="p-1 hover:bg-gray-200 rounded text-gray-600"
-          title="Add Manually"
+          :title="t('citations.addManually')"
         >
           <Plus class="w-4 h-4" />
         </button>
@@ -138,14 +141,14 @@ const removeReference = (id: string) => {
       <textarea 
         v-model="bibtexInput"
         class="w-full text-xs border border-blue-200 rounded p-2 h-24 focus:outline-none focus:border-blue-400 font-mono"
-        placeholder="Paste BibTeX content here..."
+        :placeholder="t('citations.bibtexPlaceholder')"
       ></textarea>
       <div class="flex justify-end mt-2">
         <button 
           @click="parseBibtex(bibtexInput)"
           class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
         >
-          Import
+          {{ t('citations.import') }}
         </button>
       </div>
     </div>
@@ -154,31 +157,31 @@ const removeReference = (id: string) => {
     <div v-if="isAdding" class="p-3 border-b border-gray-200 bg-gray-50">
       <div class="space-y-2">
         <select v-model="newRef.type" class="w-full text-xs border border-gray-300 rounded p-1.5">
-          <option value="article">Journal Article</option>
-          <option value="book">Book</option>
-          <option value="conference">Conference Paper</option>
-          <option value="thesis">Thesis</option>
+          <option value="article">{{ t('citations.journalArticle') }}</option>
+          <option value="book">{{ t('citations.book') }}</option>
+          <option value="conference">{{ t('citations.conferencePaper') }}</option>
+          <option value="thesis">{{ t('citations.thesis') }}</option>
         </select>
         <input 
           v-model="newRef.title" 
-          placeholder="Title"
+          :placeholder="t('citations.titleLabel')"
           class="w-full text-xs border border-gray-300 rounded p-1.5"
         />
         <input 
           v-model="newRef.author" 
-          placeholder="Author(s)"
+          :placeholder="t('citations.authorLabel')"
           class="w-full text-xs border border-gray-300 rounded p-1.5"
         />
         <div class="flex space-x-2">
           <input 
             v-model="newRef.year" 
             type="number"
-            placeholder="Year"
+            :placeholder="t('citations.yearLabel')"
             class="w-1/3 text-xs border border-gray-300 rounded p-1.5"
           />
           <input 
             v-model="newRef.journal" 
-            placeholder="Journal / Publisher"
+            :placeholder="t('citations.journalLabel')"
             class="w-2/3 text-xs border border-gray-300 rounded p-1.5"
           />
         </div>
@@ -187,13 +190,13 @@ const removeReference = (id: string) => {
             @click="isAdding = false"
             class="px-2 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded"
           >
-            Cancel
+            {{ t('citations.cancel') }}
           </button>
           <button 
             @click="addManualReference"
             class="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
           >
-            Add
+            {{ t('citations.add') }}
           </button>
         </div>
       </div>
@@ -202,8 +205,8 @@ const removeReference = (id: string) => {
     <!-- List -->
     <div class="flex-1 overflow-y-auto p-2 space-y-2">
       <div v-if="references.length === 0" class="text-center py-8 text-gray-400 text-sm">
-        <p>No citations yet.</p>
-        <p class="text-xs mt-1">Add references to cite them in your paper.</p>
+        <p>{{ t('citations.noCitations') }}</p>
+        <p class="text-xs mt-1">{{ t('citations.addDescription') }}</p>
       </div>
       
       <div 

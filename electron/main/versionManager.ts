@@ -130,6 +130,34 @@ export class VersionManager {
     return node;
   }
 
+  static saveAutosave(zip: AdmZip, data: PaperData): VersionNode {
+    const graph = this.getGraph(zip);
+    const id = 'autosave';
+    const timestamp = Date.now();
+    const wordCount = this.calculateWordCount(data);
+    const storagePath = `${SNAPSHOTS_DIR}/${id}.json`;
+
+    // Save Content (Overwrites existing)
+    zip.addFile(storagePath, Buffer.from(JSON.stringify(data, null, 2)));
+
+    // Create or Update Node
+    // Autosave is a standalone node, not part of the main branch chain
+    const node: VersionNode = {
+      id,
+      parentId: null, 
+      branchId: '',   
+      timestamp,
+      note: 'Auto-save',
+      type: 'snapshot', 
+      wordCount,
+      storagePath
+    };
+
+    graph.nodes[id] = node;
+    this.saveGraph(zip, graph);
+    return node;
+  }
+
   static createBranch(zip: AdmZip, name: string, fromNodeId?: string): Branch {
     const graph = this.getGraph(zip);
     
@@ -151,33 +179,54 @@ export class VersionManager {
     };
 
     graph.branches[id] = newBranch;
-    // We do NOT switch to it automatically (usually). User can switch explicitly.
+    graph.activeBranchId = id; // Switch to new branch
     
     this.saveGraph(zip, graph);
     return newBranch;
   }
 
-  static switchBranch(zip: AdmZip, branchId: string): { success: boolean, data?: PaperData } {
+  static switchBranch(zip: AdmZip, branchId: string): boolean {
     const graph = this.getGraph(zip);
-    const branch = graph.branches[branchId];
-    
-    if (!branch) throw new Error(`Branch ${branchId} not found`);
-
-    // Update active branch
+    if (!graph.branches[branchId]) {
+        throw new Error(`Branch ${branchId} not found`);
+    }
     graph.activeBranchId = branchId;
     this.saveGraph(zip, graph);
+    return true;
+  }
 
-    // Load HEAD of that branch
-    if (branch.headNodeId) {
-        const node = graph.nodes[branch.headNodeId];
-        if (node) {
-            const content = this.loadNodeData(zip, node);
-            return { success: true, data: content };
-        }
+  static deleteSnapshot(zip: AdmZip, snapshotId: string): boolean {
+    const graph = this.getGraph(zip);
+    const node = graph.nodes[snapshotId];
+    if (!node) return false;
+
+    // 1. Remove file
+    try {
+        zip.deleteFile(node.storagePath);
+    } catch (e) {
+        console.warn(`Failed to delete snapshot file ${node.storagePath}:`, e);
     }
 
-    // If branch is empty (new repo), return null or empty?
-    return { success: true };
+    // 2. Update parent/child links (Simplified linear)
+    const parentId = node.parentId;
+    const children = Object.values(graph.nodes).filter(n => n.parentId === snapshotId);
+    
+    children.forEach(child => {
+        child.parentId = parentId;
+    });
+
+    // 3. Update branch HEADs if necessary
+    Object.values(graph.branches).forEach(branch => {
+        if (branch.headNodeId === snapshotId) {
+            branch.headNodeId = parentId || '';
+        }
+    });
+
+    // 4. Remove from graph
+    delete graph.nodes[snapshotId];
+
+    this.saveGraph(zip, graph);
+    return true;
   }
 
   static loadNodeData(zip: AdmZip, node: VersionNode): PaperData {
@@ -188,11 +237,36 @@ export class VersionManager {
 
   private static calculateWordCount(data: PaperData): number {
     let count = 0;
+    
+    const countInContent = (content: any): number => {
+      if (!content) return 0;
+      if (typeof content === 'string') {
+        // Simple word count for Latin, character count for CJK
+        // We'll use a simple character count for now to be consistent
+        return content.trim().length;
+      }
+      if (Array.isArray(content)) {
+        return content.reduce((acc, item) => {
+          if (typeof item === 'string') return acc + item.trim().length;
+          if (item && typeof item === 'object') {
+            // TipTap JSON structure often has { text: '...' }
+            if (item.text) return acc + item.text.trim().length;
+            if (item.content) return acc + countInContent(item.content);
+          }
+          return acc;
+        }, 0);
+      }
+      return 0;
+    };
+
     data.body.forEach(b => {
-        if (typeof b.content === 'string') {
-            count += b.content.length;
-        }
+      // Only count content for text-heavy blocks: headings, paragraphs, lists
+      // Skip images, code blocks, math, etc. as per "body text only" request
+      if (['heading', 'paragraph', 'list'].includes(b.type)) {
+        count += countInContent(b.content);
+      }
     });
+    
     return count;
   }
 

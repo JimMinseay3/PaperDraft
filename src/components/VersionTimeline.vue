@@ -1,20 +1,29 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { ChevronRight, ChevronDown, Clock, Trash2, ArrowLeftRight } from 'lucide-vue-next'
 import type { VersionGraph, VersionNode } from '../types/paper'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
+type TimelineNode = VersionNode & {
+  color: string
+  branchName?: string
+  isCurrent?: boolean
+}
 
 const props = defineProps<{
   graph: VersionGraph
   activeNodeId?: string
+  isDirty?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'switch', nodeId: string): void
+  (e: 'delete', nodeId: string): void
 }>()
 
-const SPACING_Y = 60
-const SPACING_X = 30
-const OFFSET_Y = 40
-const OFFSET_X = 20
+const expandedNodes = ref(new Set<string>())
 
 // Helpers
 const formatDate = (ts: number) => new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -22,136 +31,190 @@ const formatDate = (ts: number) => new Date(ts).toLocaleString(undefined, { mont
 const branches = computed(() => props.graph.branches)
 const nodes = computed(() => props.graph.nodes)
 
-// 1. Assign columns to branches
-const branchColumns = computed(() => {
-  const cols: Record<string, number> = {}
-  const sortedBranches = Object.values(branches.value).sort((a, b) => {
-    if (a.isMain) return -1
-    if (b.isMain) return 1
-    return a.id.localeCompare(b.id)
-  })
-  
-  sortedBranches.forEach((b, i) => {
-    cols[b.id] = i
-  })
-  return cols
+const autosaveNode = computed<TimelineNode | undefined>(() => {
+  const node = nodes.value['autosave']
+  if (!node) return undefined
+  return {
+    ...node,
+    color: '#10b981', // Green for autosave
+    branchName: 'Autosave'
+  }
 })
 
-// 2. Sort nodes by timestamp desc
-const sortedNodes = computed(() => {
-  return Object.values(nodes.value).sort((a, b) => b.timestamp - a.timestamp)
-})
-
-// 3. Calculate Layout
-const layoutNodes = computed(() => {
-  return sortedNodes.value.map((node, index) => {
-    const col = branchColumns.value[node.branchId] || 0
+// Sort nodes by timestamp desc (Linear Single Track)
+const sortedNodes = computed<TimelineNode[]>(() => {
+  const list: TimelineNode[] = Object.values(nodes.value)
+    .filter(n => n.id !== 'autosave') // Exclude autosave
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .map(node => {
     const branch = branches.value[node.branchId]
-    
     return {
       ...node,
-      x: OFFSET_X + col * SPACING_X,
-      y: OFFSET_Y + index * SPACING_Y,
       color: branch?.color || '#9ca3af',
       branchName: branch?.name
     }
   })
+
+  return list
 })
 
-const height = computed(() => {
-  return (layoutNodes.value.length * SPACING_Y) + OFFSET_Y * 2
-})
-
-// 4. Calculate Connections
-const connections = computed(() => {
-  const conns: any[] = []
-  
-  layoutNodes.value.forEach(node => {
-    if (node.parentId) {
-      const parent = layoutNodes.value.find(n => n.id === node.parentId)
-      if (parent) {
-        // Draw curve
-        // If same column: straight line
-        // If diff column: bezier curve
-        
-        const p1 = { x: node.x, y: node.y }
-        const p2 = { x: parent.x, y: parent.y }
-        
-        let d = ''
-        if (p1.x === p2.x) {
-          d = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`
-        } else {
-          // Cubic Bezier for smooth branching
-          const cp1 = { x: p1.x, y: (p1.y + p2.y) / 2 }
-          const cp2 = { x: p2.x, y: (p1.y + p2.y) / 2 }
-          d = `M ${p1.x} ${p1.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${p2.x} ${p2.y}`
-        }
-        
-        conns.push({
-          id: `${node.id}-${parent.id}`,
-          path: d,
-          color: node.color // Use child's color for the link
-        })
-      }
-    }
-  })
-  
-  return conns
-})
-
+const toggleExpand = (nodeId: string) => {
+  if (expandedNodes.value.has(nodeId)) {
+    expandedNodes.value.delete(nodeId)
+  } else {
+    expandedNodes.value.add(nodeId)
+  }
+}
 </script>
 
 <template>
-  <div class="relative w-full overflow-hidden select-none" :style="{ height: height + 'px' }">
-    <!-- SVG Layer -->
-    <svg :height="height" width="100%" class="absolute top-0 left-0 pointer-events-none">
-      <defs>
-        <marker id="arrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
-          <path d="M0,0 L0,10 L10,5 z" fill="#ccc" />
-        </marker>
-      </defs>
-      <path v-for="conn in connections" :key="conn.id" 
-        :d="conn.path" 
-        :stroke="conn.color" 
-        stroke-width="2" 
-        fill="none" 
-        class="opacity-60"
-      />
-    </svg>
-    
-    <!-- Nodes Layer -->
-    <div v-for="node in layoutNodes" :key="node.id"
-      class="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-10"
-      :style="{ left: node.x + 'px', top: node.y + 'px' }"
-      @click="$emit('switch', node.id)"
-    >
-      <!-- Dot -->
-      <div class="rounded-full border-2 bg-white transition-all duration-200 hover:scale-125"
-        :class="[
-          node.type === 'milestone' ? 'w-5 h-5' : 'w-3 h-3',
-          node.id === activeNodeId ? 'ring-2 ring-offset-2 ring-blue-500' : ''
-        ]"
-        :style="{ 
-          borderColor: node.color,
-          backgroundColor: node.id === activeNodeId ? node.color : 'white'
+  <div class="w-full flex flex-col p-2 space-y-2">
+    <!-- Autosave Section -->
+    <div v-if="autosaveNode" class="mb-4">
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+          {{ t('version.autoSave') }}
+      </div>
+      <div 
+        class="border rounded-lg bg-white shadow-sm transition-all duration-200 overflow-hidden"
+        :class="{
+          'border-green-500 ring-1 ring-green-500': autosaveNode.id === activeNodeId,
+          'border-green-200 hover:border-green-300': autosaveNode.id !== activeNodeId
         }"
-      ></div>
-      
-      <!-- Hover Card / Label -->
-      <div class="absolute left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20 bg-white border border-gray-200 shadow-lg rounded px-2 py-1">
-        <div class="text-xs font-bold text-gray-700">{{ node.note }}</div>
-        <div class="text-[10px] text-gray-500 flex items-center gap-1">
-          <span>{{ node.branchName }}</span>
-          <span>•</span>
-          <span>{{ formatDate(node.timestamp) }}</span>
+      >
+        <!-- Header / Summary -->
+        <div 
+          class="flex items-center p-3 cursor-pointer select-none bg-green-50/30 hover:bg-green-50/50"
+          @click="toggleExpand(autosaveNode.id)"
+        >
+          <!-- Icon/Indicator -->
+          <div class="mr-3 flex-shrink-0">
+            <div 
+              class="w-3 h-3 rounded-full border-2"
+              :style="{ borderColor: autosaveNode.color, backgroundColor: autosaveNode.id === activeNodeId ? autosaveNode.color : 'white' }"
+            ></div>
+          </div>
+          
+          <!-- Main Info -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-800 truncate">
+                  {{ autosaveNode.note }} 
+              </span>
+              <span class="text-xs text-gray-400 flex-shrink-0 ml-2">
+                  {{ formatDate(autosaveNode.timestamp) }}
+              </span>
+            </div>
+            <div class="flex items-center mt-1 space-x-3 text-xs text-gray-500">
+               <span class="flex items-center">
+                  {{ autosaveNode.wordCount }} {{ t('version.words') }}
+               </span>
+            </div>
+          </div>
+          
+           <!-- Expand/Collapse Icon -->
+           <div class="ml-2 text-gray-400">
+              <ChevronDown v-if="expandedNodes.has(autosaveNode.id)" class="w-4 h-4" />
+              <ChevronRight v-else class="w-4 h-4" />
+            </div>
         </div>
-        <div class="text-[10px] text-gray-400">{{ node.wordCount }} words</div>
+
+        <!-- Expanded Details -->
+        <div v-if="expandedNodes.has(autosaveNode.id)" class="border-t border-gray-100 bg-gray-50 p-3">
+           <div class="flex items-center justify-between mt-3">
+             <div class="text-xs text-gray-400">ID: {{ autosaveNode.id }}</div>
+             <div class="flex space-x-2">
+                <!-- Delete Button (Maybe disable for autosave?) -->
+                 <!-- Autosave usually shouldn't be deleted manually or it will just come back. Let's hide delete for autosave. -->
+                 
+                 <!-- Compare/Restore Button -->
+                 <button 
+                   @click.stop="emit('switch', autosaveNode.id)"
+                   class="flex items-center px-2 py-1 bg-white border border-gray-200 rounded shadow-sm text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                 >
+                   <ArrowLeftRight class="w-3 h-3 mr-1" />
+                   {{ t('version.compare') }} / {{ t('common.restore') }}
+                 </button>
+             </div>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Section -->
+    <div v-if="sortedNodes.length > 0">
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+          {{ t('version.manual') }}
+      </div>
+      <div 
+        v-for="node in sortedNodes" 
+        :key="node.id"
+        class="border rounded-lg bg-white shadow-sm transition-all duration-200 overflow-hidden"
+      :class="{
+        'border-blue-500 ring-1 ring-blue-500': node.id === activeNodeId,
+        'border-gray-200 hover:border-gray-300': node.id !== activeNodeId
+      }"
+    >
+      <!-- Header / Summary -->
+      <div 
+        class="flex items-center p-3 cursor-pointer select-none bg-gray-50/50 hover:bg-gray-50"
+        @click="toggleExpand(node.id)"
+      >
+        <!-- Icon/Indicator -->
+        <div class="mr-3 flex-shrink-0">
+          <div 
+            class="w-3 h-3 rounded-full border-2"
+            :style="{ borderColor: node.color, backgroundColor: node.id === activeNodeId ? node.color : 'white' }"
+          ></div>
+        </div>
+        
+        <!-- Main Info -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-gray-800 truncate">
+                {{ node.note }} 
+            </span>
+            <span class="text-[10px] text-gray-400 ml-2 whitespace-nowrap">{{ formatDate(node.timestamp) }}</span>
+          </div>
+          <div class="flex items-center mt-1 space-x-2">
+            <span class="text-[10px] text-gray-400">{{ node.wordCount }} {{ t('version.words') }}</span>
+          </div>
+        </div>
+
+        <!-- Chevron -->
+        <div class="ml-2 text-gray-400">
+          <component :is="expandedNodes.has(node.id) ? ChevronDown : ChevronRight" class="w-4 h-4" />
+        </div>
       </div>
 
-      <!-- Simple Label (Always Visible) -->
-      <div class="absolute left-6 top-1/2 -translate-y-1/2 opacity-100 group-hover:opacity-0 transition-opacity whitespace-nowrap pointer-events-none">
-         <span class="text-xs text-gray-600 bg-white/50 px-1 rounded truncate max-w-[120px] inline-block">{{ node.note }}</span>
+      <!-- Expanded Details / Actions -->
+      <div 
+        v-if="expandedNodes.has(node.id)" 
+        class="border-t border-gray-100 p-3 bg-gray-50 space-y-3"
+      >
+        <div class="text-xs text-gray-600">
+          <p class="mb-2"><span class="font-bold">ID:</span> <span class="font-mono text-[10px]">{{ node.id.substring(0, 8) }}</span></p>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex space-x-2 justify-end">
+                <button 
+                  @click.stop="emit('delete', node.id)"
+                  class="px-2 py-1.5 bg-white border border-red-200 rounded text-xs text-red-600 hover:bg-red-50 shadow-sm transition-colors flex items-center"
+                  :title="t('common.delete')"
+                >
+                  <Trash2 class="w-3.5 h-3.5 mr-1" />
+                  {{ t('common.delete') }}
+                </button>
+                <button 
+                  @click.stop="emit('switch', node.id)"
+                  class="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-100 shadow-sm transition-colors flex items-center"
+                >
+                  <ArrowLeftRight class="w-3.5 h-3.5 mr-1" />
+                  {{ t('version.compare') }} / {{ t('common.restore') }}
+                </button>
+            </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Block } from '../types/paper'
-import { ChevronDown, ChevronRight, Image as ImageIcon, Table as TableIcon } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Image as ImageIcon, Table as TableIcon, Package } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -66,10 +66,13 @@ const extractedAssets = computed(() => {
 </script>
 
 <template>
-  <div class="h-full bg-gray-50 flex flex-col">
+  <div class="h-full bg-white flex flex-col">
     <!-- Header -->
-    <div class="p-3 border-b border-gray-200 bg-white">
-      <h2 class="text-xs font-bold text-gray-700 uppercase">{{ t('resources.title') }}</h2>
+    <div class="h-10 px-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
+      <h2 class="text-xs font-bold text-gray-700 uppercase flex items-center">
+        <Package class="w-4 h-4 mr-2 text-blue-500" />
+        {{ t('resources.title') }}
+      </h2>
     </div>
 
     <div class="flex-1 overflow-y-auto">

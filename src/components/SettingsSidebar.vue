@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { ref, watch } from 'vue'
+import { Settings } from 'lucide-vue-next'
 
 const { t, locale } = useI18n()
 
@@ -16,12 +17,16 @@ watch(currentLanguage, (newLang) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-white border-r border-gray-200 overflow-y-auto">
-    <div class="p-4 border-b border-gray-200">
-      <h2 class="text-lg font-semibold text-gray-800">{{ t('settings.title') }}</h2>
+  <div class="h-full flex flex-col bg-white border-r border-gray-200">
+    <!-- Header -->
+    <div class="h-10 px-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
+      <h2 class="text-xs font-bold text-gray-700 uppercase flex items-center">
+        <Settings class="w-4 h-4 mr-2 text-blue-500" />
+        {{ t('settings.title') }}
+      </h2>
     </div>
 
-    <div class="p-4 space-y-6">
+    <div class="flex-1 overflow-y-auto p-4 space-y-6">
       <!-- Language Settings -->
       <div class="space-y-2">
         <label class="block text-sm font-medium text-gray-700">{{ t('settings.language') }}</label>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ipcRenderer } from 'electron'
-import { PanelLeft, Settings, User } from 'lucide-vue-next'
+import { PanelLeft, User } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -165,9 +165,6 @@ onUnmounted(() => {
           :title="t('titleBar.toggleAssistant')"
         >
           <PanelLeft class="w-3.5 h-3.5" stroke-width="2" />
-        </button>
-        <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" :title="t('titleBar.settings')">
-          <Settings class="w-3.5 h-3.5" stroke-width="2" />
         </button>
         <button class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded-sm transition-colors focus:outline-none" :title="t('titleBar.user')">
           <User class="w-3.5 h-3.5" stroke-width="2" />

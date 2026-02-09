@@ -6,7 +6,7 @@
     "typography": "Typography",
     "resources": "Resources",
     "version": "Version Control",
-    "preview": "Preview",
+    "preview": "PDF Preview",
     "settings": "Settings"
   },
   "menu": {
@@ -45,6 +45,27 @@
     "noHeadings": "No headings found",
     "untitled": "Untitled"
   },
+  "citations": {
+    "title": "Citation Library",
+    "importBibtex": "Import BibTeX",
+    "addManually": "Add Manually",
+    "noCitations": "No citations yet.",
+    "addDescription": "Add references to cite them in your paper.",
+    "bibtexPlaceholder": "Paste BibTeX content here...",
+    "import": "Import",
+    "cancel": "Cancel",
+    "add": "Add",
+    "confirmDelete": "Are you sure you want to remove this reference?",
+    "journalArticle": "Journal Article",
+    "book": "Book",
+    "conferencePaper": "Conference Paper",
+    "thesis": "Thesis",
+    "titleLabel": "Title",
+    "authorLabel": "Author(s)",
+    "yearLabel": "Year",
+    "journalLabel": "Journal / Publisher",
+    "selectCitation": "Select Citation"
+  },
   "resources": {
     "title": "Resources",
     "images": "Images",
@@ -55,23 +76,26 @@
     "table": "Table"
   },
   "version": {
-    "title": "Version History",
-    "createSnapshot": "Create Snapshot",
+    "title": "Archives",
+    "createSnapshot": "Save Archive",
     "createBranch": "Create Branch",
-    "noSnapshots": "No snapshots yet",
+    "noSnapshots": "No archives yet",
     "compare": "Compare",
-    "modalTitle": "Create New Snapshot",
+    "modalTitle": "New Archive",
     "branchTitle": "New Branch",
-    "placeholder": "What changed in this version?",
+    "placeholder": "Enter archive name",
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
     "restoreBlock": "Restore Block",
     "restored": "Block Restored",
-    "saveFirst": "Please save the file before managing versions",
+    "saveFirst": "Please save the file before creating an archive",
     "autoSave": "Auto-save",
     "manual": "Manual",
-    "words": "words"
+    "words": "words",
+    "currentUnsaved": "Current Changes (Unsaved)",
+    "confirmDelete": "Are you sure you want to delete this archive? This action cannot be undone.",
+    "confirmRestoreAll": "Are you sure you want to load this archive? Current unsaved changes will be overwritten."
   },
   "settings": {
     "title": "Settings",
@@ -81,10 +105,29 @@
     "themeDark": "Dark (Coming Soon)",
     "about": "About"
   },
+  "typography": {
+    "title": "Typography",
+    "globalFonts": "Global Fonts",
+    "enFont": "English Font",
+    "zhFont": "Chinese Font",
+    "heading1": "Heading 1",
+    "heading2": "Heading 2",
+    "heading3": "Heading 3",
+    "heading4": "Heading 4",
+    "bodyText": "Body Text",
+    "size": "Size",
+    "color": "Color",
+    "spacingBefore": "Spacing Before",
+    "spacingAfter": "Spacing After",
+    "paragraphLayout": "Paragraph Layout",
+    "firstLineIndent": "First Line Indent",
+    "lineHeight": "Line Height"
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
     "save": "Save",
-    "delete": "Delete"
+    "delete": "Delete",
+    "restore": "Restore"
   }
 }

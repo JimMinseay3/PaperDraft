@@ -24,14 +24,17 @@ const emit = defineEmits<{
   (e: 'change-view', view: string): void
 }>()
 
-const menuItems = computed(() => [
+const topMenuItems = computed(() => [
   { id: 'file', icon: Files, title: t('activityBar.file') },
   { id: 'search', icon: Search, title: t('activityBar.search') },
   { id: 'citations', icon: BookOpen, title: t('activityBar.citations') },
-  { id: 'typography', icon: Type, title: t('activityBar.typography') },
   { id: 'resources', icon: Package, title: t('activityBar.resources') },
+  { id: 'typography', icon: Type, title: t('activityBar.typography') },
   { id: 'version', icon: Clock, title: t('activityBar.version') },
   { id: 'preview', icon: Eye, title: t('activityBar.preview') },
+])
+
+const bottomMenuItems = computed(() => [
   { id: 'settings', icon: Settings, title: t('activityBar.settings') },
 ])
 
@@ -50,17 +53,36 @@ const isActive = (id: string) => {
 </script>
 
 <template>
-  <div class="h-full bg-gray-900 flex flex-col items-center py-4 space-y-4">
-    
-    <div 
-      v-for="item in menuItems" 
-      :key="item.id"
-      class="w-7 h-7 rounded cursor-pointer transition-colors flex items-center justify-center"
-      :class="isActive(item.id) ? 'bg-gray-800 text-blue-400' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'"
-      :title="item.title"
-      @click="handleClick(item.id)"
-    >
-      <component :is="item.icon" :size="18" class="w-[18px] h-[18px]" stroke-width="2" />
+  <div class="h-full bg-gray-900 flex flex-col items-center py-4">
+    <!-- Top Items -->
+    <div class="flex flex-col items-center space-y-4 w-full">
+      <div 
+        v-for="item in topMenuItems" 
+        :key="item.id"
+        class="w-7 h-7 rounded cursor-pointer transition-colors flex items-center justify-center"
+        :class="isActive(item.id) ? 'bg-gray-800 text-blue-400' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'"
+        :title="item.title"
+        @click="handleClick(item.id)"
+      >
+        <component :is="item.icon" :size="18" class="w-[18px] h-[18px]" stroke-width="2" />
+      </div>
+    </div>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- Bottom Items -->
+    <div class="flex flex-col items-center space-y-4 w-full">
+      <div 
+        v-for="item in bottomMenuItems" 
+        :key="item.id"
+        class="w-7 h-7 rounded cursor-pointer transition-colors flex items-center justify-center"
+        :class="isActive(item.id) ? 'bg-gray-800 text-blue-400' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'"
+        :title="item.title"
+        @click="handleClick(item.id)"
+      >
+        <component :is="item.icon" :size="18" class="w-[18px] h-[18px]" stroke-width="2" />
+      </div>
     </div>
   </div>
 </template>
